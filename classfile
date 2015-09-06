@@ -1,0 +1,3206 @@
+import scipy.integrate
+import matplotlib.pyplot as plt
+import numpy as np
+import xlwt
+from mpl_toolkits.mplot3d import Axes3D
+import operator
+import warnings
+warnings.filterwarnings('ignore')
+
+class Calvin(object):
+    def __init__(self):
+        '''kinetic parameters & equilibrium constants'''
+        self.par = {'V1' : 0.34*8,#orginal
+                    'V6' : 0.2*8,#orginal
+                    'V9' : 0.04*8,#orginal
+                    'V13' : 0.9999*8,#orginal
+                    'V16' : 0.35*8,#orginal
+                    'Vst' : 0.04*8,#orginal
+                    'Vx' : 0.25*8,#orginal
+                    'Vnadph' : 0.352*8,#ausgerechneter wert (ideal wert) #orginal
+                    "Km1" : 0.02,
+                    "KmCO2": 0.0107 ,#millimol laut witzel,
+                    "Km6" : 0.03,
+                    "Km9" : 0.013,
+                    "Km131" : 0.05,
+                    "Km132" : 0.05,
+                    "Km161" : 0.014,
+                    "Km162" : 0.3,
+                    "Kmst1" : 0.08,
+                    "Kmst2" : 0.08,
+                    "Kmnadph" : 0.19,#ausgerechneter wert (ideal wert)
+                    "Kpga" : 0.25,
+                    "Kgap" : 0.075,
+                    "Kdhap" : 0.077,
+                    "Kpi" : 0.63,
+                    "Kpxt" : 0.74,
+                    "Ki11" : 0.04,
+                    "Ki12" : 0.04,
+                    "Ki13" : 0.075,
+                    "Ki14" : 0.9,
+                    "Ki15" : 0.07,
+                    "Ki61" : 0.7,
+                    "Ki62" : 12.0,
+                    "Ki9" : 12.0,
+                    "Ki131" : 2.0,
+                    "Ki132" : 0.7,
+                    "Ki133" : 4.0, 
+                    "Ki134" : 2.5, 
+                    "Ki135" : 0.4, 
+                    "Kist" : 10.0, 
+                    "Kast1" : 0.1, 
+                    "Kast2" : 0.02, 
+                    "Kast3" : 0.02, 
+                    "k" : 10.0**8.0*8, 
+                    "q2" : 3.1 * (10.0 ** (-4.0)),
+                   "q3" : 1.6 * (10.0**7.0),
+                   "q4" : 22.0,
+                   "q5" : (7.1),
+                   "q7" : 0.084,
+                   "q8" : (13.0),
+                   "q10" : 0.85,
+                   "q11" : 0.4,
+                   "q12" : 0.67,
+                   "q14" : 2.3,
+                   "q15" : 0.058}
+
+        '''fixed stoichiometric parameters'''
+        self.CN=0.5
+        self.CO2 = 0.2
+        self.Cp = 15.0
+        self.Ca = 0.5
+        self.pHmedium = 7.6
+        self.pHstroma = 7.9
+        self.H = (10.0**((-1.0)*self.pHstroma))*1000.0
+        self.Pext = 0.5
+        
+   
+    def v1(self,RUBP,PGA,FBP,SBP,P,NADPH):
+        return (self.par['V1']*RUBP*self.CO2)/((RUBP+self.par["Km1"]*(1+(PGA/self.par["Ki11"])+(FBP/self.par["Ki12"])+(SBP/self.par["Ki13"])+(P/self.par["Ki14"])+(NADPH/self.par["Ki15"])))*(self.CO2+self.par['KmCO2']))
+    
+    def v2(self, ATP,PGA,ADP, BPGA):
+        return self.par["k"]*((ATP*PGA)-(1/self.par["q2"])*(ADP*BPGA))
+
+    def v3(self,NADPH, BPGA, GAP,NADP, P):
+        return self.par["k"]*((NADPH*BPGA*self.H)-(1/self.par["q3"])*(GAP*NADP*P))
+
+    def v4(self,GAP, DHAP):
+        return self.par["k"]*((GAP)-(1/self.par["q4"])*(DHAP))
+
+    def v5(self,GAP, DHAP, FBP):
+        return self.par["k"]*((GAP*DHAP)-(1/self.par["q5"])*(FBP))
+
+    def v6(self,FBP, F6P, P):
+        return (self.par['V6']*FBP)/(FBP+self.par["Km6"]*(1+(F6P/self.par["Ki61"])+(P/self.par["Ki62"])))
+
+    def v7(self,GAP, F6P, X5P, E4P):
+        return self.par["k"]*((GAP*F6P)-(1/self.par["q7"])*(X5P*E4P))
+
+    def v8(self, DHAP, E4P, SBP):
+        return self.par["k"]*((DHAP*E4P)-(1/self.par["q8"])*(SBP))
+
+    def v9(self,SBP, P):
+        return (self.par['V9']*SBP)/(SBP+self.par["Km9"]*(1+(P/self.par["Ki9"])))
+
+    def v10(self,GAP, S7P, X5P, R5P):
+        return self.par["k"]*((GAP*S7P)-(1/self.par["q10"])*(X5P*R5P))
+
+    def v11(self,R5P, RU5P):
+        return self.par["k"]*((R5P)-(1/self.par["q11"])*(RU5P))
+
+    def v12(self, X5P, RU5P):
+        return self.par["k"]*((X5P)-(1/self.par["q12"])*(RU5P))
+
+    def v13(self, RU5P, ATP, PGA, RUBP, P, ADP):
+        return (self.par['V13']*RU5P*ATP)/((RU5P+self.par["Km131"]*(1+(PGA/self.par["Ki131"])+(RUBP/self.par["Ki132"])+(P/self.par["Ki133"])))*(ATP*(1+(ADP/self.par["Ki134"]))+self.par["Km132"]*(1+(ADP/self.par["Ki135"]))))
+
+    def v14(self, F6P, G6P):
+        return self.par["k"]*((F6P)-(1/self.par["q14"])*(G6P))
+
+    def v15(self, G6P, G1P):
+        return self.par["k"]*((G6P)-(1/self.par["q15"])*(G1P))
+    
+    def v16(self, ADP, P):
+        return (self.par['V16']*ADP*P)/((ADP+self.par["Km161"])*(P+self.par["Km162"]))
+
+    def N (self, P, PGA, GAP, DHAP):
+        return 1+(1+(self.par["Kpxt"]/self.Pext))*((P/self.par["Kpi"])+(PGA/self.par["Kpga"])+(GAP/self.par["Kgap"])+(DHAP/self.par["Kdhap"]))
+
+    def vpga(self, PGA, P, GAP, DHAP):
+        return (self.par['Vx']*PGA)/(self.N(P, PGA, GAP, DHAP)*self.par["Kpga"])
+
+    def vgap(self, GAP, P, PGA, DHAP):
+        return (self.par['Vx']*GAP)/(self.N(P, PGA, GAP, DHAP)*self.par["Kgap"])
+
+    def vdhap(self, DHAP, P, PGA, GAP):
+        return (self.par['Vx']*DHAP)/(self.N(P, PGA, GAP, DHAP)*self.par["Kdhap"])
+
+    def vex(self, PGA, GAP, DHAP, P, N):
+        return self.vpga(PGA, P, GAP, DHAP, N) + self.vgap(GAP, P, PGA, DHAP, N) + self.vdhap(DHAP, P, PGA, GAP, N)
+
+    def vst(self, G1P, ATP, ADP, P, PGA, F6P, FBP):
+        return (self.par['Vst']*G1P*ATP)/((G1P+self.par["Kmst1"])*((1+(ADP/self.par["Kist"]))*(ATP+self.par["Kmst2"])+((self.par["Kmst2"]*P)/(self.par["Kast1"]*PGA+self.par["Kast2"]*F6P+self.par["Kast3"]*FBP))))
+
+    def vnadph(self, NADP):
+        #return (1/0.67)*NADP
+        return (self.par['Vnadph']*NADP)/(self.par["Kmnadph"]+NADP)
+ 
+    ''''modelling the main-function'''
+        
+    def modell (self, T, (PGA, BPGA, GAP, DHAP, FBP, F6P, G6P, G1P, SBP, S7P, E4P, X5P, R5P, RUBP, RU5P, ATP,NADPH)):
+        ADP = self.Ca - ATP
+        
+        P = self.Cp - (PGA + 2*BPGA + GAP + DHAP + 2*FBP + F6P + G6P + G1P + 2*SBP + S7P + E4P + X5P + R5P + 2*RUBP + RU5P + ATP)
+        
+        NADP=self.CN - NADPH        
+        
+        dPGA = 2*self.v1(RUBP,PGA,FBP,SBP,P,NADPH) - self.v2(ATP,PGA,ADP, BPGA) - self.vpga(PGA, P, GAP, DHAP)
+    
+        dBPGA = self.v2(ATP,PGA,ADP, BPGA) - self.v3(NADPH,BPGA, GAP,NADP, P)
+
+        dGAP = self.v3(NADPH,BPGA, GAP,NADP, P) - self.v4(GAP, DHAP) - self.v5(GAP, DHAP, FBP) - self.v7(GAP, F6P, X5P, E4P) - self.v10(GAP, S7P, X5P, R5P) - self.vgap(GAP, P, PGA, DHAP)
+
+        dDHAP = self.v4(GAP, DHAP) - self.v5(GAP, DHAP, FBP) - self.v8(DHAP, E4P, SBP) - self.vdhap(DHAP, P, PGA, GAP)
+
+        dFBP = self.v5(GAP, DHAP, FBP) - self.v6(FBP, F6P, P)
+
+        dF6P = self.v6(FBP, F6P, P) - self.v7(GAP, F6P, X5P, E4P) - self.v14(F6P, G6P)
+
+        dG6P = self.v14(F6P, G6P) - self.v15(G6P, G1P)
+
+        dG1P = self.v15(G6P, G1P) - self.vst(G1P, ATP, ADP, P, PGA, F6P, FBP)
+
+        dSBP = self.v8(DHAP, E4P, SBP) - self.v9(SBP, P)
+
+        dS7P = self.v9(SBP, P) - self.v10(GAP, S7P, X5P, R5P)
+
+        dE4P = self.v7(GAP, F6P, X5P, E4P) - self.v8(DHAP, E4P, SBP)
+
+        dX5P = self.v7(GAP, F6P, X5P, E4P) + self.v10(GAP, S7P, X5P, R5P) - self.v12(X5P, RU5P)
+
+        dR5P = self.v10(GAP, S7P, X5P, R5P) - self.v11(R5P, RU5P)
+
+        dRUBP = self.v13(RU5P, ATP, PGA, RUBP, P, ADP) - self.v1(RUBP,PGA,FBP,SBP,P,NADPH)
+
+        dRU5P = self.v11(R5P, RU5P) + self.v12(X5P, RU5P) - self.v13(RU5P, ATP, PGA, RUBP, P, ADP)
+
+        dATP = self.v16(ADP, P) - self.v2(ATP,PGA,ADP, BPGA) - self.v13(RU5P, ATP, PGA, RUBP, P, ADP) - self.vst(G1P, ATP, ADP, P, PGA, F6P, FBP)
+        
+        dNADPH = self.vnadph(NADP) - self.v3(NADPH,BPGA, GAP,NADP, P)
+        
+        return [dPGA, dBPGA, dGAP, dDHAP, dFBP, dF6P, dG6P, dG1P, dSBP, dS7P, dE4P, dX5P, dR5P, dRUBP, dRU5P, dATP, dNADPH]
+
+    def steadystate(self,initvalue,AbsTol=1e-9):
+        array=list()
+        array.append(initvalue)
+        e = scipy.integrate.ode(self.modell).set_integrator('lsoda').set_initial_value(initvalue, 0)
+        time=range(1200000)
+        err = np.linalg.norm(initvalue,ord=2)
+
+        ctn = 1
+        while e.successful and ctn < len(time) and err > AbsTol:
+            L = e.integrate(time[ctn])
+            err = np.linalg.norm(L-array[-1],ord=2)
+            array.append(L)
+            
+            #print('T=',time[ctn],' err=',err)
+            #print
+            ctn+=1
+        return array[-1]
+
+
+
+    def literature_timeintegration(self,initvalue,time):
+        x=Calvin()
+        x.par=self.par.copy()
+        
+        x.par['Vnadph']=0.13*0.25
+        x.par['Kmnadph']=0.036
+        x.timeintegration(initvalue,time)
+        
+    def starchmutant_timeintegration(self,initvalue,time):
+        x=Calvin()
+        x.par=self.par.copy()
+        
+        x.par['Vst']=0.
+        x.timeintegration(initvalue,time)        
+
+    def tptmutant_timeintegration(self,initvalue,time):
+        x=Calvin()
+        x.par=self.par.copy()
+        
+        x.par['Vx']=0.0001
+        x.timeintegration(initvalue,time)
+        
+    def tptmutant_procent(self,initvalue,variation):
+        x=Calvin()
+        x.par=self.par.copy()
+        
+        x.par['Vx']=x.par['Vx']*variation
+        x.vatpsurface(initvalue, '3')
+    
+    def vatpsurface(self, initvalue, choice):
+        
+        if choice == "1":
+            
+            xv=Calvin()
+            xv.par=self.par.copy()
+            
+            
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,0.9,20)
+            var2=np.linspace(0.1,0.9,20)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['V16']=(Var*0.25)
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    vatp=xv.vnadph(NADP)
+                    vnadph=xv.v16(ADP, P)
+                    
+                    balance1=(NADPH/ATP)
+                    balance2=(vnadph/vatp)
+                    
+                    naturalatp=(ATP/xv.Ca)
+                    naturalnadph=(NADPH/xv.CN)
+                    
+                    
+
+                                    
+                                    
+                                    
+                    vx1.append(ATP)
+                    vx2.append(NADPH)
+                    list1.append(Var)
+                                    
+                                    
+                                    
+                                    
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                                    
+                                    
+                                    
+            Vmaxatplist.append(list1)
+    
+    
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+    
+    
+    
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+    
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            Q=NADPHlist
+    
+    
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+    
+    
+    
+            ha.plot_surface(X, Y, Z,alpha=0.5,color="g", rstride=1, cstride=1,
+                       linewidth=1, antialiased=True)#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            ha.plot_surface(X, Y, Q,alpha=0.5,color="r", rstride=1, cstride=1,
+                       linewidth=1, antialiased=True)
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+
+            #for k in range(len(scatterlist)):
+                
+                #ha.scatter(scatterlist[k][0],scatterlist[k][1],scatterlist[k][2],color='k')
+            #ha.scatter(0.12,0.021,0.46,color='k')
+            
+            ha.set_xlabel('ATP Vmax')
+            ha.set_ylabel('NADPH Vmax')
+            ha.set_zlabel('Steady State Concentration')
+            
+            plt.title('Red: NADPH, Green: ATP')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            #print goodstuff
+                
+
+        if choice == "2":
+        
+            xv=Calvin()
+            xv.par=self.par.copy()
+            
+            
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,0.9,20)
+            var2=np.linspace(0.1,0.9,20)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['V16']=(Var*0.25)
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    vnadph=xv.vnadph(NADP)
+                    vatp=xv.v16(ADP, P)
+                    
+                    balance2=(vnadph/vatp)
+
+
+                    
+                            
+                    vx1.append(vatp)
+                    vx2.append(vnadph)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+        
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+                        
+                        
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            Q=NADPHlist
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            ha.plot_surface(X, Y, Z,alpha=0.5,color="g", rstride=1, cstride=1,
+                       linewidth=1, antialiased=True)#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            ha.plot_surface(X, Y, Q,alpha=0.5,color="r", rstride=1, cstride=1,
+                       linewidth=1, antialiased=True)
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            
+            scatterlist=np.array(scatterlist)
+            #for k in range(len(scatterlist)):
+                
+                #ha.scatter(scatterlist[k][0],scatterlist[k][1],scatterlist[k][2],color='k')
+                
+            ha.set_xlabel('Vmax ATP')
+            ha.set_ylabel('Vmax NADPH')
+            ha.set_zlabel('Steady State Flux')
+            
+            plt.title('Red: NADPH-Flux, Green: ATP-Flux')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            print ATPlist, NADPHlist
+                                
+                                
+        if choice == "3":
+        
+            xv=Calvin()
+            xv.par=self.par.copy()
+            
+            a=xv.steadystate(initvalue)
+            P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+            ATP=a[15]
+            ADP=(0.5-ATP)
+            NADPH=a[16]
+            NADP=(0.5-NADPH)
+                    
+                    
+            vpga=xv.vpga(a[0], P, a[2], a[3])
+       
+            vgap=xv.vgap(a[2], P, a[0], a[3])
+       
+            vdhap=xv.vdhap(a[3], P, a[0], a[2])
+                    
+            vtpt = vdhap + vgap + vpga
+                    
+            vst = xv.vst(a[7], a[15], ADP, P, a[0], a[5], a[4])
+                    
+            carbonbalance= (6*vst)/((6*vst)+(3*vtpt))
+                    
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,0.9,10)
+            var2=np.linspace(0.1,0.9,10)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['V16']=(Var*0.25)
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    
+                    vpga=xv.vpga(a[0], P, a[2], a[3])
+       
+                    vgap=xv.vgap(a[2], P, a[0], a[3])
+       
+                    vdhap=xv.vdhap(a[3], P, a[0], a[2])
+                    
+                    vtpt = vdhap + vgap + vpga
+                    
+                    vst = xv.vst(a[7], a[15], ADP, P, a[0], a[5], a[4])
+                    
+                    carbonbalance= (6*vst)/((6*vst)+(3*vtpt))
+                    
+
+                    
+#                    if balance2<0.7 and balance2>0.6:
+#                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+#                            scatterlist.append([var,Var,vatp])
+#                            scatterlist.append([var,Var,vnadph])
+#                            
+#                            
+                    vx1.append(carbonbalance)
+                    #vx2.append(vnadph)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+            
+            
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            Q=NADPHlist
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            surf=ha.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap=plt.cm.jet,
+                       linewidth=1, antialiased=True,alpha=0.6)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+
+            #for x,y,z in zip(scatteratp,scatternadph,scatterlist):
+            #ha.scatter(0.34,0.352,zyx,color='b',alpha=0.4)
+
+            #ha.plot(0.34,0.35,scatterlist, color='k')
+
+            #ha.plot_surface(X, Y, Q,alpha=0.4, color='r',label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            
+            hf.colorbar(surf)
+            ha.set_xlabel('Vmax ATP')
+            ha.set_ylabel('Vmax NADPH')
+            ha.set_zlabel('carbonbalance')
+            
+            plt.title('Percentage of fixed Carbon of CO2 in starch')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            print goodstuff                     
+                    
+        if choice == "4":
+        
+            xv=Calvin()
+            xv.par=self.par.copy()
+            
+            
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,0.9,10)
+            var2=np.linspace(0.1,0.9,10)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['V16']=(Var*0.25)
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    
+                    rubisco= xv.v1(a[13],a[0],a[4],a[8],P,a[16])
+                    
+
+                    
+#                    if balance2<0.7 and balance2>0.6:
+#                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+#                            scatterlist.append([var,Var,vatp])
+#                            scatterlist.append([var,Var,vnadph])
+#                            
+#                            
+                    vx1.append(rubisco)
+                    #vx2.append(vnadph)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+            
+            
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            Q=NADPHlist
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            surf=ha.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap=plt.cm.jet,
+                       linewidth=1, antialiased=True)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            #ha.plot_surface(X, Y, Q,alpha=0.4, color='r',label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            
+            hf.colorbar(surf)
+                
+            ha.set_xlabel('Vmax ATP')
+            ha.set_ylabel('Vmax NADPH')
+            ha.set_zlabel('rubisco activity')
+            
+            plt.title('Rubisco activity dependencies')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            print goodstuff
+        if choice == "starchmutant":
+        
+            xv=Calvin()
+            xv.par=self.par.copy()
+            xv.par['Vst']=0.0001
+            
+            
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,0.9,10)
+            var2=np.linspace(0.1,0.9,10)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['V16']=(Var*0.25)
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    
+                    vpga=xv.vpga(a[0], P, a[2], a[3])
+       
+                    vgap=xv.vgap(a[2], P, a[0], a[3])
+       
+                    vdhap=xv.vdhap(a[3], P, a[0], a[2])
+                    
+                    vtpt = vdhap + vgap + vpga
+                    
+                    vst = xv.vst(a[7], a[15], ADP, P, a[0], a[5], a[4])
+                    
+                    carbonbalance= (6*vst)/((6*vst)+(3*vtpt))
+                    
+
+                    
+#                    if balance2<0.7 and balance2>0.6:
+#                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+#                            scatterlist.append([var,Var,vatp])
+#                            scatterlist.append([var,Var,vnadph])
+#                            
+#                            
+                    vx1.append(carbonbalance)
+                    #vx2.append(vnadph)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+            
+            
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            Q=NADPHlist
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            surf=ha.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap=plt.cm.jet,
+                       linewidth=1, antialiased=True)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            #ha.plot_surface(X, Y, Q,alpha=0.4, color='r',label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            
+            hf.colorbar(surf)
+            ha.set_xlabel('Vmax ATP')
+            ha.set_ylabel('Vmax NADPH')
+            ha.set_zlabel('carbonbalance')
+            
+            plt.title('Percentage of fixed Carbon of CO2 in starch')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            print goodstuff 
+            
+        if choice == "tptmutant":
+        
+            xv=Calvin()
+            xv.par=self.par.copy()
+            xv.par['Vx']=0.0001
+            
+            
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,0.9,10)
+            var2=np.linspace(0.1,0.9,10)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['V16']=(Var*0.25)
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    
+                    vpga=xv.vpga(a[0], P, a[2], a[3])
+       
+                    vgap=xv.vgap(a[2], P, a[0], a[3])
+       
+                    vdhap=xv.vdhap(a[3], P, a[0], a[2])
+                    
+                    vtpt = vdhap + vgap + vpga
+                    
+                    vst = xv.vst(a[7], a[15], ADP, P, a[0], a[5], a[4])
+                    
+                    carbonbalance= (6*vst)/((6*vst)+(3*vtpt))
+                    
+
+                    
+#                    if balance2<0.7 and balance2>0.6:
+#                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+#                            scatterlist.append([var,Var,vatp])
+#                            scatterlist.append([var,Var,vnadph])
+#                            
+#                            
+                    vx1.append(carbonbalance)
+                    #vx2.append(vnadph)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+            
+            
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            Q=NADPHlist
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            surf=ha.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap=plt.cm.jet,
+                       linewidth=1, antialiased=True)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            #ha.plot_surface(X, Y, Q,alpha=0.4, color='r',label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            
+            hf.colorbar(surf)
+            ha.set_xlabel('Vmax ATP')
+            ha.set_ylabel('Vmax NADPH')
+            ha.set_zlabel('carbonbalance')
+            
+            plt.title('Percentage of fixed Carbon of CO2 in starch')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            print goodstuff
+        if choice == "pga":
+        
+            xv=Calvin()
+            xv.par=self.par.copy()
+            
+            
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,0.9,10)
+            var2=np.linspace(0.1,0.9,10)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['V16']=(Var*0.25)
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    
+                    vpga=xv.vpga(a[0], P, a[2], a[3])
+       
+                    vgap=xv.vgap(a[2], P, a[0], a[3])
+       
+                    vdhap=xv.vdhap(a[3], P, a[0], a[2])
+                    
+                    vtpt = vdhap + vgap + vpga
+                    
+                    vredu=vgap+vdhap
+                    
+                    vst = xv.vst(a[7], a[15], ADP, P, a[0], a[5], a[4])
+                    
+                    carbonbalance= (6*vst)/((6*vst)+(3*vtpt))
+                    
+
+                    
+#                    if balance2<0.7 and balance2>0.6:
+#                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+#                            scatterlist.append([var,Var,vatp])
+#                            scatterlist.append([var,Var,vnadph])
+#                            
+#                            
+                    vx1.append(vredu)
+                    vx2.append(vpga)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+            
+            
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            Q=NADPHlist
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            ha.plot_surface(X, Y, Z, rstride=1, cstride=1, color='g',alpha=0.4)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            #ha.plot_surface(X, Y, Q,alpha=0.4, color='r',label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            ha.plot_surface(X, Y, Q, rstride=1, cstride=1, color='r',alpha=0.4)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+                     
+            #hf.colorbar(surf)
+            ha.set_xlabel('Vmax ATP')
+            ha.set_ylabel('Vmax NADPH')
+            ha.set_zlabel('vpga vs vgap+dhap')
+            
+            plt.title('green: gap/dhap, red:pga')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            print goodstuff  
+
+
+
+    def vnadphsurface(self, initvalue, choice):
+        
+        if choice == "1":#ATP UND NADPH STEADY STATE CONCENTRATIONEN
+            
+            xv=Calvin()
+            xv.par=self.par.copy()
+            
+            
+            Vmaxlist=list()
+            Kmlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,0.9,20)
+            var2=np.linspace(0.05,0.3,20)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['Kmnadph']=Var
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    vatp=xv.vnadph(NADP)
+                    vnadph=xv.v16(ADP, P)
+                    
+                    balance1=(NADPH/ATP)
+                    balance2=(vnadph/vatp)
+                    
+                    naturalatp=(ATP/xv.Ca)
+                    naturalnadph=(NADPH/xv.CN)
+                    
+                    
+                    #STEADYSTATE NADPH/ATP CONCENTRATION
+                                       
+                    if balance1<0.7 and balance1>0.5:
+                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + ' Balance= ' + str(balance1) +'ATP= '+str(ATP)+'NADPH'+str(NADPH)))
+                            scatterlist.append([var,Var,ATP])
+                            scatterlist.append([var,Var,NADPH])                
+ 
+                                    
+                                    
+                                    
+                    vx1.append(ATP)
+                    vx2.append(NADPH)
+                    list1.append(Var)
+                                    
+                                    
+                                    
+                                    
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxlist.append(var)
+                                    
+                                    
+                                    
+            Kmlist.append(list1)
+    
+    
+            Vmaxlist=np.array(Vmaxlist)
+            Kmlist=np.array(Kmlist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+    
+    
+    
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+    
+            X, Y = np.meshgrid(Vmaxlist, Kmlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            Q=NADPHlist
+    
+    
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+    
+    
+    
+            ha.plot_surface(X, Y, Z,alpha=0.5,color="g", rstride=1, cstride=1,
+                       linewidth=1, antialiased=True,label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            ha.plot_surface(X, Y, Q,alpha=0.5,color="r", rstride=1, cstride=1,
+                       linewidth=1, antialiased=True,label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            
+            scatterlist=np.array(scatterlist)
+            #for k in range(len(scatterlist)):
+                
+                #ha.scatter(scatterlist[k][0],scatterlist[k][1],scatterlist[k][2],color='k')
+            #ha.scatter(0.12,0.021,0.46,color='k')
+            
+            ha.set_xlabel('Vmax')
+            ha.set_ylabel('Km')
+            ha.set_zlabel('Steady State Concentration')
+            
+            plt.title('Red: NADPH, Green: ATP')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            #print goodstuff
+                
+
+        if choice == "2":#ATP UND NADPH STEADY STATE FLUX
+        
+            xv=Calvin()
+            xv.par=self.par.copy()
+            
+            
+            Vmaxlist=list()
+            Kmlist=list()
+            scatterlist=list()
+            
+            vATPlist=list()            
+            vNADPHlist=list()
+            cATPlist=list()
+            cNADPHlist=list()            
+            
+            var1=np.linspace(0.1,0.9,20)
+            var2=np.linspace(0.01,0.5,20)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                vx3=list()
+                vx4=list()
+                xv.par['Vnadph']=(var*0.25)
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par['Kmnadph']=Var
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+                    NADPH=a[16]
+                    NADP=(0.5-NADPH)
+                    
+                    vnadph=xv.vnadph(NADP)
+                    vatp=xv.v16(ADP, P)
+                    balance1=(NADPH/ATP)
+                    balance2=(vnadph/vatp)
+
+
+                    
+                    if balance2<0.68 and balance2>0.64 and balance1<0.7 and balance1>0.6:
+                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+                            scatterlist.append([var,Var,vatp])
+                            scatterlist.append([var,Var,vnadph])
+                            
+                            
+                    vx1.append(vatp)
+                    vx2.append(vnadph)
+                    vx3.append(ATP)
+                    vx4.append(NADPH)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+        
+                vATPlist.append(vx1)
+                vNADPHlist.append(vx2)
+                cATPlist.append(vx3)
+                cNADPHlist.append(vx4)
+                Vmaxlist.append(var)
+                            
+                            
+                            
+            Kmlist.append(list1)
+                        
+                        
+            Vmaxlist=np.array(Vmaxlist)
+            Kmlist=np.array(Kmlist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxlist, Kmlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=vATPlist
+            Q=vNADPHlist
+
+            
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            ha.plot_surface(X, Y, Z,alpha=0.5,color="g", rstride=1, cstride=1,
+                       linewidth=1, antialiased=True,label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            ha.plot_surface(X, Y, Q,alpha=0.5,color="r", rstride=1, cstride=1,
+                       linewidth=1, antialiased=True,label='NADPH')
+   
+            
+            scatterlist=np.array(scatterlist)
+            #for k in range(len(scatterlist)):
+                
+                #ha.scatter(scatterlist[k][0],scatterlist[k][1],scatterlist[k][2],color='k')
+                
+            ha.set_xlabel('Vmax')
+            ha.set_ylabel('Km')
+            ha.set_zlabel('Steady State Flux')
+            
+            plt.title('Red: NADPH-Flux, Green: ATP-Flux')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            print goodstuff
+
+
+    def timeintegration(self,initvalue, time):
+        array=list()
+        array.append(initvalue)
+        z = scipy.integrate.ode(self.modell).set_integrator('lsoda').set_initial_value(initvalue, 0)
+
+        cnt = 1
+        while z.successful and cnt < len(time):
+            array.append(z.integrate(time[cnt]))
+    
+            cnt+=1
+            
+            
+        Array1=list() #beinhaltet G6P, PGA, F6P, S7P
+        Array2=list() #beinhaltet RU5P, X5P, SBP, G1P
+        Array3=list() #beinhaltet ATP, DHAP, RUBP, R5P
+        Array4=list() #beinhaltet BPGA, E4P, FBP, GAP
+        for k in range(len(time)):
+    #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8
+    #S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15, NADPH=16
+
+            Array1.append([array[k][6],array[k][0],array[k][5],array[k][9]])
+            Array2.append([array[k][14],array[k][11],array[k][8],array[k][7]])
+            Array3.append([array[k][15],array[k][3],array[k][13],array[k][12],array[k][16]])
+            Array4.append([array[k][1],array[k][10],array[k][4],array[k][2]])
+
+        array1 = np.array(Array1)
+        array2 = np.array(Array2)
+        array3 = np.array(Array3)
+        array4 = np.array(Array4)
+
+
+
+
+
+        label1 = ['G6P', 'PGA', 'F6P', 'S7P']
+        label2 = ['RU5P', 'X5P', 'SBP', 'G1P']
+        label3 = ['ATP', 'DHAP', 'RUBP', 'R5P','NADPH']
+        label4 = ['BPGA', 'E4P', 'FBP', 'GAP']
+
+    #N = plt.figure(1)
+
+        plt.subplot(2, 2, 1)
+        for a in range(4):
+            plt.plot(time, array1[:,a], label=str(label1[a]))
+        plt.xlabel('Time in Seconds')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+        plt.subplot(2, 2, 2)
+        for s in range(4):
+            plt.plot(time, array2[:,s], label=str(label2[s]))
+        plt.xlabel('Time in Seconds')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+
+        plt.subplot(2, 2, 3)
+        for d in range(5):
+            plt.plot(time, array3[:,d], label=str(label3[d]))
+        plt.xlabel('Time in Seconds')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+
+        plt.subplot(2, 2, 4)
+        for c in range(4):
+            plt.plot(time, array4[:,c], label=str(label4[c]))
+        plt.xlabel('Time in Seconds')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+        plt.show()
+#initvalue(y0),ZEITEINHEIT (T), ARRAY (Y)
+
+
+
+    def fluxratessteadystate1(self, initvalue,AbsTol=1e-4):
+        z=self.steadystate(initvalue,AbsTol)
+        
+        P=15-(z[0]+2*z[1]+z[2]+z[3]+2*z[4]+z[5]+z[6]+z[7]+2*z[8]+z[9]+z[10]+z[11]+z[12]+2*z[13]+z[14]+z[15])
+        ADP= 0.5-z[15]
+        NADP=0.5-z[16]
+        
+        V1= self.v1(z[13],z[0],z[4],z[8],P,z[16])
+       
+        V6= self.v6(z[4], z[5], P)
+       
+        V9=self.v9(z[8], P)
+       
+        V13=self.v13(z[14], z[15], z[0], z[13], P, ADP)
+       
+        V16=self.v16(ADP, P)
+       
+        Vpga=self.vpga(z[0], P, z[2], z[3])
+       
+        Vgap=self.vgap(z[2], P, z[0], z[3])
+       
+        Vdhap=self.vdhap(z[3], P, z[0], z[2])
+       
+        Vst=self.vst(z[7], z[15], ADP, P, z[0], z[5], z[4])
+        
+        Vnadph=self.vnadph(NADP)
+        
+        Vex=Vpga+Vgap+Vdhap        
+        
+        array=[V1,V6,V9,V13,V16,Vex,Vst,Vnadph]
+        return array
+        
+    def fluxratessteadystate(self,initvalue):
+
+        array=list()
+        array.append(self.fluxratessteadystate1(initvalue))
+        array2=tuple(self.fluxratessteadystate1(initvalue))
+        
+
+
+        fig, ax = plt.subplots()
+        n_rates=8
+        index = np.arange(n_rates)
+        bar_width = 0.35
+
+        opacity = 0.4
+
+        rects1 = plt.bar(index, array2, bar_width,
+                 alpha=opacity,
+                 color='g')
+
+
+
+        plt.xlabel('Rate')
+        plt.ylabel('Activity')
+        plt.title('Steadystate Fluxes')
+        plt.xticks(index + bar_width, ('V1', 'V6', 'V9', 'V13', 'Vatp','Vex','Vst','Vnadph'))
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+        return array
+
+
+    def expofluxratessteadystate1(self, initvalue,AbsTol=1e-4):
+        z=self.steadystate(initvalue,AbsTol)
+        
+        P=15-(z[0]+2*z[1]+z[2]+z[3]+2*z[4]+z[5]+z[6]+z[7]+2*z[8]+z[9]+z[10]+z[11]+z[12]+2*z[13]+z[14]+z[15])
+        ADP= 0.5-z[15]
+        NADP=0.5-z[16]
+        
+        V1= self.v1(z[13],z[0],z[4],z[8],P,z[16])
+       
+        V6= self.v6(z[4], z[5], P)
+       
+        V9=self.v9(z[8], P)
+       
+        V13=self.v13(z[14], z[15], z[0], z[13], P, ADP)
+       
+        V16=self.v16(ADP, P)
+       
+        Vpga=self.vpga(z[0], P, z[2], z[3])
+       
+        Vgap=self.vgap(z[2], P, z[0], z[3])
+       
+        Vdhap=self.vdhap(z[3], P, z[0], z[2])
+       
+        Vst=self.vst(z[7], z[15], ADP, P, z[0], z[5], z[4])
+        
+        Vnadph=self.vnadph(NADP)
+        
+        Vex=Vpga+Vgap+Vdhap        
+        
+        array=[Vpga,Vgap,Vdhap]
+        return array
+        
+    def expofluxratessteadystate(self,initvalue):
+
+        array=list()
+        array.append(self.expofluxratessteadystate1(initvalue))
+        array2=tuple(self.expofluxratessteadystate1(initvalue))
+        
+
+
+        fig, ax = plt.subplots()
+        n_rates=3
+        index = np.arange(n_rates)
+        bar_width = 0.35
+
+        opacity = 0.4
+
+        rects1 = plt.bar(index, array2, bar_width,
+                 alpha=opacity,
+                 color='g')
+
+
+
+        plt.xlabel('Rate')
+        plt.ylabel('Activity')
+        plt.title('Steadystate Fluxes')
+        plt.xticks(index + bar_width, ('Vpga', 'Vgap', 'Vdhap'))
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+        return array
+        
+        
+        
+        
+
+    
+           #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8 S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15
+
+    def fluxratessteadystateMUTANT(self,initvalue,parameter):
+
+        array1 = self.fluxratessteadystate1(initvalue)
+        
+        x1 = Calvin()
+        x1.par=self.par.copy()
+
+
+        x1.par[parameter]=0.1
+                
+        
+        array=list()
+        array2=list()
+        str3="Mutant.xls"
+        str2="Activity: "
+        while x1.par[parameter]<1.4:
+            nr1=np.subtract(x1.fluxratessteadystate1(initvalue),array1)
+            nr2=np.divide(nr1, array1)
+            array.append(nr2)
+            str1=repr(x1.par[parameter])
+            array2.append(str1)
+            x1.par[parameter]+=0.2
+            
+        book = xlwt.Workbook()
+        sh=book.add_sheet('sheet')
+        
+        sh.write(0,0," ")
+        sh.write(0,1,"V1")
+        sh.write(0,2,"V6")
+        sh.write(0,3,"V9")
+        sh.write(0,4,"V13")
+        sh.write(0,5,"Vatp")
+        sh.write(0,6,"Vex")
+        sh.write(0,7,"Vst")
+        sh.write(0,8,"Vnadph")
+        sh.write(1,0,str2+array2[0])
+        sh.write(2,0,str2+array2[1])
+        sh.write(3,0,str2+array2[2])
+        sh.write(4,0,str2+array2[3])
+        sh.write(5,0,str2+array2[4])
+        sh.write(6,0,str2+array2[5])
+        sh.write(7,0,str2+array2[6])
+        #sh.write(8,0,str2+array2[7])
+        #sh.write(9,0,str2+array2[8])
+        #sh.write(10,0,str2+array2[9])
+
+ 
+        for j in range(len(array)):
+            for i in range(len(array[j])):
+                sh.write(j+1,i+1,array[j][i])
+
+
+    
+        book.save(parameter+str3)
+        array=np.array(array)
+        column_names = ['V1','V6','V9','V13','Vatp','Vex','Vst','Vnadph']
+        row_names = ['Activity:0.1 ','Activity:0.3 ','Activity:0.5','Activity:0.7 ','Activity:0.8 ','Activity:1.0 ','Activity:1.2 ']
+        
+        fig = plt.figure()
+        ax = Axes3D(fig)
+        
+        lx= len(array[0])            # Work out matrix dimensions
+        ly= len(array[:,0])
+        xpos = np.arange(0,lx,1)    # Set up a mesh of positions
+        ypos = np.arange(0,ly,1)
+        xpos, ypos = np.meshgrid(xpos+0.25, ypos+0.25)
+        
+        xpos = xpos.flatten()   # Convert positions to 1D array
+        ypos = ypos.flatten()
+        zpos = np.zeros(lx*ly)
+        
+        dx = 0.5 * np.ones_like(zpos)
+        dy = dx.copy()
+        dz = array.flatten()
+        
+        #values = np.linspace(0.2, 1., xpos.shape[0])
+        #colors = plt.cm.rainbow(values)
+
+        ax.bar3d(xpos,ypos,zpos, dx, dy, dz,color='g',alpha=0.5)
+        ax.w_xaxis.set_ticklabels(column_names)
+        ax.w_yaxis.set_ticklabels(row_names)
+        ax.set_xlabel('Affected Rate')
+        ax.set_ylabel('Modified Rate')
+        ax.set_zlabel('Activity')
+
+        plt.show()         
+        return array
+    def output(self,filename,array):
+      
+        
+        book = xlwt.Workbook()
+        sh=book.add_sheet('sheet')
+        
+        sh.write(0,0," ")
+        sh.write(0,1,"V1")
+        sh.write(0,2,"V6")
+        sh.write(0,3,"V9")
+        sh.write(0,4,"V13")
+        sh.write(0,5,"V16")
+        sh.write(0,6,"Vex")
+        sh.write(0,7,"Vst")
+        sh.write(0,8,"Vnadph")
+        sh.write(1,0,"V1 mod.")
+        sh.write(2,0,"V6 mod.")
+        sh.write(3,0,"V9 mod.")
+        sh.write(4,0,"V13 mod.")
+        sh.write(5,0,"V16 mod.")
+        sh.write(6,0,"Vex mod.")
+        sh.write(7,0,"Vst mod.")
+        sh.write(8,0,"k mod.")
+        sh.write(9,0,"Vnadph mod.")
+
+        for j in range(len(array)):
+            for i in range(len(array[j])):
+                sh.write(j+1,i+1,array[j][i])
+
+
+    
+        book.save(filename)        
+    def controlcoefficient1(self,initvalue, parameter,var,choice="array"):
+        
+       x1 = Calvin()
+       x1.par=self.par.copy()
+       x99 = Calvin()
+       x99.par=self.par.copy()
+
+       x99.par[parameter]=x99.par[parameter]*(1-var)
+       x1.par[parameter]=x1.par[parameter]*(1+var)
+       
+       z99=x99.steadystate(initvalue)
+       z1=x1.steadystate(initvalue)
+       z=self.steadystate(initvalue)
+       
+       controlcoefficient = (((z1-z99)/z)/(var*2))
+       
+       
+       P=15-(z[0]+2*z[1]+z[2]+z[3]+2*z[4]+z[5]+z[6]+z[7]+2*z[8]+z[9]+z[10]+z[11]+z[12]+2*z[13]+z[14]+z[15])
+       ADP= 0.5-z[15]
+       NADP= 0.5-z[16]
+       
+       
+       P1=15-(z1[0]+z1[1]+z1[2]+z1[3]+z1[4]+z1[5]+z1[6]+z1[7]+z1[8]+z1[9]+z1[10]+z1[11]+z1[12]+z1[13]+z1[14]+z1[15])
+       ADP1=0.5-z1[15]
+       NADP1=0.5-z1[16]
+       
+       P99=15-(z99[0]+z99[1]+z99[2]+z99[3]+z99[4]+z99[5]+z99[6]+z99[7]+z99[8]+z99[9]+z99[10]+z99[11]+z99[12]+z99[13]+z99[14]+z99[15])
+       ADP99=0.5-z99[15]
+       NADP99=0.5-z99[16]
+       
+       
+       V1= ((x1.v1(z1[13],z1[0],z1[4],z1[8],P1,z1[16]) - x99.v1(z99[13],z99[0],z99[4],z99[8],P99,z99[16]))/self.v1(z[13],z[0],z[4],z[8],P,z[16]))/(var*2)
+       
+       V6= ((x1.v6(z1[4], z1[5], P1)-x99.v6(z99[4], z99[5], P99))/self.v6(z[4], z[5], P))/(var*2)
+       
+       V9= ((x1.v9(z1[8], P1)-x99.v9(z99[8], P99))/self.v9(z[8], P))/(var*2)
+       
+       V13= ((x1.v13(z1[14], z1[15], z1[0], z1[13], P1, ADP1)-x99.v13(z99[14], z99[15], z99[0], z99[13], P99, ADP99))/self.v13(z[14], z[15], z[0], z[13], P, ADP))/(var*2)
+       
+       V16= ((x1.v16(ADP1, P1) - x99.v16(ADP99, P99))/self.v16(ADP, P))/(var*2)
+       
+       Vpga= ((x1.vpga(z1[0], P1, z1[2], z1[3]) - x99.vpga(z99[0], P99, z99[2], z99[3]))/self.vpga(z[0], P, z[2], z[3]))/(var*2)
+       
+       Vgap= ((x1.vgap(z1[2], P1, z1[0], z1[3]) - x99.vgap(z99[2], P99, z99[0], z99[3]))/self.vgap(z[2], P, z[0], z[3]))/(var*2)
+       
+       Vdhap=((x1.vdhap(z1[3], P1, z1[0], z1[2]) - x99.vdhap(z99[3], P99, z99[0], z99[2]))/self.vdhap(z[3], P, z[0], z[2]))/(var*2)
+       
+       Vex=Vpga+Vgap+Vdhap
+       
+       Vst=((x1.vst(z1[7], z1[15], ADP1, P1, z1[0], z1[5], z1[4]) - x99.vst(z99[7], z99[15], ADP99, P99, z99[0], z99[5], z99[4]))/self.vst(z[7], z[15], ADP, P, z[0], z[5], z[4]))/(var*2)
+       
+       Vnadph=((x1.vnadph(NADP1) - x99.vnadph(NADP99))/self.vnadph(NADP))/(var*2)
+       
+       
+       array=[V1,V6,V9,V13,V16,Vex, Vst,Vnadph]
+       
+       dictionary={"V1":V1,"V6":V6,"V9":V9,"V13":V13,"V16":V16,"Vx":Vex,"Vst":Vst,"Vnadph":Vnadph}
+       
+       if choice == "array":           
+           return array
+       if choice == "dictionary":
+           return dictionary
+       #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8 S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15
+    
+    
+    '''
+    {'V1' : 0.34*0.25,#orginal
+                    'V6' : 0.2*0.25,#orginal
+                    'V9' : 0.04*0.25,#orginal
+                    'V13' : 0.9999*0.25,#orginal
+                    'V16' : 0.35*0.25,#orginal
+                    'Vst' : 0.04*0.25,#orginal
+                    'Vx' : 0.25*0.25,#orginal
+                    'Vnadph' : 0.352*0.25
+    '''
+    def starchimprovement(self, initvalue):
+        Vmaxarray=list()
+        starchfluxes=list()
+        x=Calvin()
+        x.par=self.par.copy()
+        while x.par['V1']>(0.05*0.25) and x.par['V6']>(0.05*0.25) and x.par['V9']>(0.02*0.25) and x.par['V13']>(0.05*0.25) and x.par['Vx']>(0.05*0.25):
+            
+        
+        
+            V1dict=x.controlcoefficient1(initvalue,"V1",0.01,"dictionary")
+            V6dict=x.controlcoefficient1(initvalue,"V6",0.01,"dictionary")
+            V9dict=x.controlcoefficient1(initvalue,"V9",0.01,"dictionary")
+            V13dict=x.controlcoefficient1(initvalue,"V13",0.01,"dictionary")
+            Vexdict=x.controlcoefficient1(initvalue,"Vx",0.01,"dictionary")
+            
+            testdict={"V1":V1dict["Vst"],"V6":V6dict["Vst"],"V9":V9dict["Vst"],"V13":V13dict["Vst"],"Vx":Vexdict["Vst"]}
+                      
+                      
+            for key, value in sorted(testdict.iteritems(), key=lambda (k,v): (v,k)):
+                print str(key)+" = "+str(value)
+                          
+                          
+            y0=max(testdict.iteritems(), key=operator.itemgetter(1))[0]
+            y1=min(testdict, key=testdict.get)
+
+            
+            print y0
+            print x.par[y0]
+            print 
+            
+            #print x.par[y[0]]
+            x.par[y0]=x.par[y0]+(0.05*0.25)
+            
+            print y0
+            print x.par[y0]
+            print
+            print y1
+            print x.par[y1]
+            print 
+            
+            
+            
+            x.par[y1]
+            x.par[y1]=x.par[y1]-(0.05*0.25)
+
+
+
+            
+            print
+            print y1
+            print x.par[y1]
+            print
+            
+            Vmaxarray.append([x.par['V1'], x.par['V6'],x.par['V9'] ,x.par['V13'],x.par['Vx']])
+            if x.par[y1] < 0:
+                break    
+        return Vmaxarray
+        
+    def starchimprovement2(self, initvalue):
+        Vmaxarray=list()
+        starchfluxes=list()
+        x=Calvin()
+        x.par=self.par.copy()
+        while x.par['V1']>(0.1*0.25) and x.par['V6']>(0.05*0.25) and x.par['V9']>(0.02*0.25) and x.par['V13']>(0.1*0.25) and x.par['V16']>(0.1*0.25) and x.par['Vx']>(0.1*0.25) or x.par['Vnadph']>(0.1*0.25):
+            
+        
+        
+            V1dict=x.controlcoefficient1(initvalue,"V1",0.01,"dictionary")
+            V6dict=x.controlcoefficient1(initvalue,"V6",0.01,"dictionary")
+            V9dict=x.controlcoefficient1(initvalue,"V9",0.01,"dictionary")
+            V13dict=x.controlcoefficient1(initvalue,"V13",0.01,"dictionary")
+            V16dict=x.controlcoefficient1(initvalue,"V16",0.01,"dictionary")
+            Vexdict=x.controlcoefficient1(initvalue,"Vx",0.01,"dictionary")
+            Vnadphdict=x.controlcoefficient1(initvalue,"Vnadph",0.01,"dictionary")
+            
+            testdict={"V1":V1dict["Vst"],"V6":V6dict["Vst"],"V9":V9dict["Vst"],"V13":V13dict["Vst"],
+                      "V16":V16dict["Vst"],"Vx":Vexdict["Vst"],"Vnadph":Vnadphdict["Vst"]}
+                      
+                      
+            for key, value in sorted(testdict.iteritems(), key=lambda (k,v): (v,k)):
+                print str(key)+" = "+str(value)
+                          
+                          
+            y0=max(testdict.iteritems(), key=operator.itemgetter(1))[0]
+            y1=min(testdict, key=testdict.get)
+
+            
+            print y0
+            print x.par[y0]
+            print 
+            
+            #print x.par[y[0]]
+            x.par[y0]=x.par[y0]+(0.1*0.25)
+            
+            print y0
+            print x.par[y0]
+            print
+            print y1
+            print x.par[y1]
+            print 
+            
+            
+            
+            x.par[y1]
+            x.par[y1]=x.par[y1]-(0.1*0.25)
+
+
+
+            
+            print
+            print y1
+            print x.par[y1]
+            print
+            
+            Vmaxarray.append([x.par['V1'], x.par['V6'],x.par['V9'] ,x.par['V13'], x.par['V16'] ,x.par['Vx'] ,x.par['Vnadph']])
+            if x.par[y1] < 0:
+                break    
+        return Vmaxarray    
+        
+#            V1dict=x.controlcoefficient1(initvalue,"V1",0.01,"dictionary")
+#            V6dict=x.controlcoefficient1(initvalue,"V6",0.01,"dictionary")
+#            V9dict=x.controlcoefficient1(initvalue,"V9",0.01,"dictionary")
+#            V13dict=x.controlcoefficient1(initvalue,"V13",0.01,"dictionary")
+#            V16dict=x.controlcoefficient1(initvalue,"V16",0.01,"dictionary")
+#            Vexdict=x.controlcoefficient1(initvalue,"Vx",0.01,"dictionary")
+#            Vnadphdict=x.controlcoefficient1(initvalue,"Vnadph",0.01,"dictionary")
+#            
+#            testdict={"V1":V1dict["Vst"],"V6":V6dict["Vst"],"V9":V9dict["Vst"],"V13":V13dict["Vst"],
+#                      "V16":V16dict["Vst"],"Vx":Vexdict["Vst"],"Vnadph":Vnadphdict["Vst"]}
+#                      
+#            for key, value in sorted(testdict.iteritems(), key=lambda (k,v): (v,k)):
+#                print str(key)+" = "+str(value)
+#                          
+#            print
+#            print testdict
+#            print        
+    
+    
+    
+    
+    
+
+
+
+    def controlcoefficients(self,initvalue):
+
+            array=list()
+            array.append(self.controlcoefficient1(initvalue, 'V1',0.01))
+            array.append(self.controlcoefficient1(initvalue, 'V6',0.01))
+            array.append(self.controlcoefficient1(initvalue, 'V9',0.01))
+            array.append(self.controlcoefficient1(initvalue, 'V13',0.01))
+            array.append(self.controlcoefficient1(initvalue, 'V16',0.01))
+            array.append(self.controlcoefficient1(initvalue, 'Vx',0.01))
+            array.append(self.controlcoefficient1(initvalue, 'Vst',0.01))
+            array.append(self.controlcoefficient1(initvalue, 'k',0.01))
+            array.append(self.controlcoefficient1(initvalue, 'Vnadph',0.01))
+            
+            
+
+            self.output("fluxcontrolcoefficients.xls",array)
+            array=np.array(array)
+            column_names = ['V1','V6','V9','V13','Vatp','Vex','Vst','Vnadph']
+            row_names = ['V1 mod','V6 mod','V9 mod','V13 mod','Vatp mod','Vx mod','Vst mod','k mod','Vnadph mod']
+            
+            fig = plt.figure()
+            ax = Axes3D(fig)
+            
+            lx= len(array[0])            # Work out matrix dimensions
+            ly= len(array[:,0])
+            xpos = np.arange(0,lx,1)    # Set up a mesh of positions
+            ypos = np.arange(0,ly,1)
+            xpos, ypos = np.meshgrid(xpos+0.25, ypos+0.25)
+            
+            xpos = xpos.flatten()   # Convert positions to 1D array
+            ypos = ypos.flatten()
+            zpos = np.zeros(lx*ly)
+            
+            dx = 0.5 * np.ones_like(zpos)
+            dy = dx.copy()
+            dz = array.flatten()
+            
+            values = np.linspace(0.2, 1., xpos.shape[0])
+            colors = plt.cm.rainbow(values)
+
+            ax.bar3d(xpos,ypos,zpos, dx, dy, dz, color=colors,alpha=0.6)
+            
+            #sh()
+            ax.w_xaxis.set_ticklabels(column_names)
+            ax.w_yaxis.set_ticklabels(row_names)
+            ax.set_xlabel('Affected Rate')
+            ax.set_ylabel('Modified Rate')
+            ax.set_zlabel('Controlcoefficient')
+
+            plt.show()
+            
+            
+    def expocontrolcoefficient1(self,initvalue, parameter,var,choice="array"):
+        
+       x1 = Calvin()
+       x1.par=self.par.copy()
+       x99 = Calvin()
+       x99.par=self.par.copy()
+
+       x99.par[parameter]=x99.par[parameter]*(1-var)
+       x1.par[parameter]=x1.par[parameter]*(1+var)
+       
+       z99=x99.steadystate(initvalue)
+       z1=x1.steadystate(initvalue)
+       z=self.steadystate(initvalue)
+       
+       controlcoefficient = (((z1-z99)/z)/(var*2))
+       
+       
+       P=15-(z[0]+2*z[1]+z[2]+z[3]+2*z[4]+z[5]+z[6]+z[7]+2*z[8]+z[9]+z[10]+z[11]+z[12]+2*z[13]+z[14]+z[15])
+       ADP= 0.5-z[15]
+       NADP= 0.5-z[16]
+       
+       
+       P1=15-(z1[0]+z1[1]+z1[2]+z1[3]+z1[4]+z1[5]+z1[6]+z1[7]+z1[8]+z1[9]+z1[10]+z1[11]+z1[12]+z1[13]+z1[14]+z1[15])
+       ADP1=0.5-z1[15]
+       NADP1=0.5-z1[16]
+       
+       P99=15-(z99[0]+z99[1]+z99[2]+z99[3]+z99[4]+z99[5]+z99[6]+z99[7]+z99[8]+z99[9]+z99[10]+z99[11]+z99[12]+z99[13]+z99[14]+z99[15])
+       ADP99=0.5-z99[15]
+       NADP99=0.5-z99[16]
+       
+       
+       V1= ((x1.v1(z1[13],z1[0],z1[4],z1[8],P1,z1[16]) - x99.v1(z99[13],z99[0],z99[4],z99[8],P99,z99[16]))/self.v1(z[13],z[0],z[4],z[8],P,z[16]))/(var*2)
+       
+       V6= ((x1.v6(z1[4], z1[5], P1)-x99.v6(z99[4], z99[5], P99))/self.v6(z[4], z[5], P))/(var*2)
+       
+       V9= ((x1.v9(z1[8], P1)-x99.v9(z99[8], P99))/self.v9(z[8], P))/(var*2)
+       
+       V13= ((x1.v13(z1[14], z1[15], z1[0], z1[13], P1, ADP1)-x99.v13(z99[14], z99[15], z99[0], z99[13], P99, ADP99))/self.v13(z[14], z[15], z[0], z[13], P, ADP))/(var*2)
+       
+       V16= ((x1.v16(ADP1, P1) - x99.v16(ADP99, P99))/self.v16(ADP, P))/(var*2)
+       
+       Vpga= ((x1.vpga(z1[0], P1, z1[2], z1[3]) - x99.vpga(z99[0], P99, z99[2], z99[3]))/self.vpga(z[0], P, z[2], z[3]))/(var*2)
+       
+       Vgap= ((x1.vgap(z1[2], P1, z1[0], z1[3]) - x99.vgap(z99[2], P99, z99[0], z99[3]))/self.vgap(z[2], P, z[0], z[3]))/(var*2)
+       
+       Vdhap=((x1.vdhap(z1[3], P1, z1[0], z1[2]) - x99.vdhap(z99[3], P99, z99[0], z99[2]))/self.vdhap(z[3], P, z[0], z[2]))/(var*2)
+       
+       Vex=Vpga+Vgap+Vdhap
+       
+       Vst=((x1.vst(z1[7], z1[15], ADP1, P1, z1[0], z1[5], z1[4]) - x99.vst(z99[7], z99[15], ADP99, P99, z99[0], z99[5], z99[4]))/self.vst(z[7], z[15], ADP, P, z[0], z[5], z[4]))/(var*2)
+       
+       Vnadph=((x1.vnadph(NADP1) - x99.vnadph(NADP99))/self.vnadph(NADP))/(var*2)
+       
+       
+       array=[Vpga, Vgap, Vdhap]
+       
+       dictionary={"Vpga":Vpga,"Vgap":Vgap,"Vdhap":Vdhap,"V13":V13,"V16":V16,"Vx":Vex,"Vst":Vst,"Vnadph":Vnadph}
+       
+       if choice == "array":           
+           return array
+       if choice == "dictionary":
+           return dictionary
+       #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8 S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15
+    
+    
+    '''
+    {'V1' : 0.34*0.25,#orginal
+                    'V6' : 0.2*0.25,#orginal
+                    'V9' : 0.04*0.25,#orginal
+                    'V13' : 0.9999*0.25,#orginal
+                    'V16' : 0.35*0.25,#orginal
+                    'Vst' : 0.04*0.25,#orginal
+                    'Vx' : 0.25*0.25,#orginal
+                    'Vnadph' : 0.352*0.25
+    '''            
+    def controlcoefficientsexporter(self,initvalue):
+
+            array=list()
+            array.append(self.expocontrolcoefficient1(initvalue, 'V1',0.01))
+            array.append(self.expocontrolcoefficient1(initvalue, 'V6',0.01))
+            array.append(self.expocontrolcoefficient1(initvalue, 'V9',0.01))
+            array.append(self.expocontrolcoefficient1(initvalue, 'V13',0.01))
+            array.append(self.expocontrolcoefficient1(initvalue, 'V16',0.01))
+            array.append(self.expocontrolcoefficient1(initvalue, 'Vx',0.01))
+            array.append(self.expocontrolcoefficient1(initvalue, 'Vst',0.01))
+            array.append(self.expocontrolcoefficient1(initvalue, 'k',0.01))
+            array.append(self.expocontrolcoefficient1(initvalue, 'Vnadph',0.01))
+            
+            
+
+            self.output("fluxcontrolcoefficients.xls",array)
+            array=np.array(array)
+            column_names = ['Vpga'," "," ",'Vgap'," ",'Vdhap']
+            row_names = ['V1 mod','V6 mod','V9 mod','V13 mod','Vatp mod','Vx mod','Vst mod','k mod','Vnadph mod']
+            
+            fig = plt.figure()
+            ax = Axes3D(fig)
+            
+            lx= len(array[0])            # Work out matrix dimensions
+            ly= len(array[:,0])
+            xpos = np.arange(0,lx,1)    # Set up a mesh of positions
+            ypos = np.arange(0,ly,1)
+            xpos, ypos = np.meshgrid(xpos+0.25, ypos+0.25)
+            
+            xpos = xpos.flatten()   # Convert positions to 1D array
+            ypos = ypos.flatten()
+            zpos = np.zeros(lx*ly)
+            
+            dx = 0.5 * np.ones_like(zpos)
+            dy = dx.copy()
+            dz = array.flatten()
+            
+            values = np.linspace(0.2, 1., xpos.shape[0])
+            colors = plt.cm.rainbow(values)
+
+            ax.bar3d(xpos,ypos,zpos, dx, dy, dz, color=colors,alpha=0.6)
+            
+            #sh()
+            ax.w_xaxis.set_ticklabels(column_names)
+            ax.w_yaxis.set_ticklabels(row_names)
+            ax.set_xlabel('Affected Rate')
+            ax.set_ylabel('Modified Rate')
+            ax.set_zlabel('Controlcoefficient')
+
+            plt.show()            
+            
+    def v1VsPext(self,initvalue):
+        x=Calvin()
+        x.Pext = 0.03
+        
+        
+        concArray=list()
+        concArray2=list()
+        concArray3=list()
+        tptarray=list()
+        pextArray=list()
+        while x.Pext <= 3.0:
+            z=x.steadystate(initvalue)
+            P=15-(z[0]+2*z[1]+z[2]+z[3]+2*z[4]+z[5]+z[6]+z[7]+2*z[8]+z[9]+z[10]+z[11]+z[12]+2*z[13]+z[14]+z[15])
+
+            V1= x.v1(z[13],z[0],z[4],z[8],P,z[16])
+            #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8
+            #S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15, NADPH=16
+            #    def vdhap(self, DHAP, P, PGA, GAP):
+
+            Vex = x.vpga(z[0],P,z[2],z[3])+x.vgap(z[2],P,z[0],z[3])+x.vdhap(z[3],P,z[0],z[2])
+            concArray.append(V1)
+            concArray2.append(P)
+            concArray3.append(z[16])
+            tptarray.append([x.vpga(z[0],P,z[2],z[3]),x.vgap(z[2],P,z[0],z[3]),x.vdhap(z[3],P,z[0],z[2])])
+            
+                
+            
+            pextArray.append(x.Pext)
+            x.Pext += 0.03
+        tptarray=np.array(tptarray)
+        plt.subplot(2,2,1)
+        plt.plot(pextArray, concArray, label='Rubisco Activity')
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Activity')
+        plt.legend(loc='best')
+                
+        plt.subplot(2,2,2)
+        plt.plot(pextArray, concArray2, label='Internal orthophosphate concentration')
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+        
+        plt.subplot(2,2,3)
+        plt.plot(pextArray, concArray3, label='NADPH concentration')
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+        
+        label1 = ['pga', 'gap', 'dhap']
+        
+        plt.subplot(2, 2, 4)
+        for a in range(3):
+            plt.plot(pextArray, tptarray[:,a], label=str(label1[a]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+            
+            
+            
+    def iterationPext(self,initvalue):
+        x=Calvin()
+        x.Pext = 0.03
+        
+        
+        concArray=list()
+        pextArray=list()
+        while x.Pext <= 4.0:
+            std=x.steadystate(initvalue)
+            concArray.append(std)
+            
+            
+                
+            
+            pextArray.append(x.Pext)
+            x.Pext += 0.03
+        
+        Array1=list() #beinhaltet G6P, PGA, F6P, S7P
+        Array2=list() #beinhaltet RU5P, X5P, SBP, G1P
+        Array3=list() #beinhaltet ATP, DHAP, RUBP, R5P
+        Array4=list() #beinhaltet BPGA, E4P, FBP, GAP
+
+#Y.append(y0)
+
+        for k in range(len(pextArray)):
+    #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8
+    #S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15, NADPH=16
+
+            Array1.append([concArray[k][6],concArray[k][0],concArray[k][5],concArray[k][9]])
+            Array2.append([concArray[k][14],concArray[k][11],concArray[k][8],concArray[k][7]])
+            Array3.append([concArray[k][15],concArray[k][3],concArray[k][13],concArray[k][12],concArray[k][16]])
+            Array4.append([concArray[k][1],concArray[k][10],concArray[k][4],concArray[k][2]])
+
+        array1 = np.array(Array1)
+        array2 = np.array(Array2)
+        array3 = np.array(Array3)
+        array4 = np.array(Array4)
+
+
+
+
+
+
+        label1 = ['G6P', 'PGA', 'F6P', 'S7P']
+        label2 = ['RU5P', 'X5P', 'SBP', 'G1P']
+        label3 = ['ATP', 'DHAP', 'RUBP', 'R5P','NADPH']
+        label4 = ['BPGA', 'E4P', 'FBP', 'GAP']
+
+        #N = plt.figure(1)
+
+        plt.subplot(2, 2, 1)
+        for a in range(4):
+            plt.plot(pextArray, array1[:,a], label=str(label1[a]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+            
+        plt.subplot(2, 2, 2)
+        for s in range(4):
+            plt.plot(pextArray, array2[:,s], label=str(label2[s]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+                
+                
+        plt.subplot(2, 2, 3)
+        for d in range(5):
+            plt.plot(pextArray, array3[:,d], label=str(label3[d]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+                    
+                    
+        plt.subplot(2, 2, 4)
+        for c in range(4):
+            plt.plot(pextArray, array4[:,c], label=str(label4[c]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+        plt.show()
+        
+        
+        
+    def nadphpext(self,initvalue,choice):
+        xv=Calvin()
+
+        if choice == "v1":
+            
+            
+
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,3.5,10)
+            var2=np.linspace(0.1,2,10)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.Pext=var
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.par=self.par.copy()
+                    
+                    xv.par['V16']=xv.par['V16']*Var
+                    xv.par['Vnadph']=xv.par['Vnadph']*Var
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+    
+                    
+                    
+                    V1= xv.v1(a[13],a[0],a[4],a[8],P,a[16])
+    
+                    
+    
+                    
+    #                    if balance2<0.7 and balance2>0.6:
+    #                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+    #                            scatterlist.append([var,Var,vatp])
+    #                            scatterlist.append([var,Var,vnadph])
+    #                            
+    #                            
+                    vx1.append(V1)
+                    #vx2.append(vnadph)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+            
+            
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            surf=ha.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap=plt.cm.jet,
+                       linewidth=1, antialiased=True)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            #ha.plot_surface(X, Y, Q,alpha=0.4, color='r',label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            
+            hf.colorbar(surf)
+            ha.set_xlabel('Percentage of PS efficiency')
+            ha.set_ylabel('pext concentration')
+            ha.set_zlabel('Rubisco Flux')
+            
+            plt.title('Dependency on NADPH and PEXT')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            #print goodstuff
+
+
+
+
+
+        
+'''##########################################'''
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class CalvinHardcodedNADPH(object):
+    def __init__(self):
+        '''kinetic parameters & equilibrium constants'''
+        self.par = {'V1' : 0.34*0.25,#(340.)*0.25,
+                    #'V1' : 340*0.25,
+
+                    'V6' : 0.2*0.25,#(200.)*0.25,
+                    #'V6' : 200*0.25,
+                    
+                    'V9' : 0.04*0.25,#(40.)*0.25,
+                    #'V9' : 40*0.25,
+                    
+                    'V13' : 1.0*0.25,#(1000.)*0.25,
+                    #'V13' : 1000*0.25,
+                    
+                    'V16' : 0.35*0.25,#(350.)*0.25,
+                    #'V16' : 350*0.25,
+                    
+                    'Vst' : 0.04*0.25,#(40.)*0.25,
+                    #'Vst' : 40*0.25,
+                    
+                    'Vx' : 0.25*0.25,#(250.)*0.25,
+                    #'Vx' : 250*0.25,
+                    
+                    "Km1" : 0.02,
+                    "Km6" : 0.03,
+                    "Km9" : 0.013,
+                    "Km131" : 0.05,
+                    "Km132" : 0.05,
+                    "Km161" : 0.014,
+                    "Km162" : 0.3,
+                    "Kmst1" : 0.08,
+                    "Kmst2" : 0.08,
+                    "Kpga" : 0.25,
+                    "Kgap" : 0.075,
+                    "Kdhap" : 0.077,
+                    "Kpi" : 0.63,
+                    "Kpxt" : 0.74,
+                    "Ki11" : 0.04,
+                    "Ki12" : 0.04,
+                    "Ki13" : 0.075,
+                    "Ki14" : 0.9,
+                    "Ki15" : 0.07,
+                    "Ki61" : 0.7,
+                    "Ki62" : 12.0,
+                    "Ki9" : 12.0,
+                    "Ki131" : 2.0,
+                    "Ki132" : 0.7,
+                    "Ki133" : 4.0, 
+                    "Ki134" : 2.5, 
+                    "Ki135" : 0.4, 
+                    "Kist" : 10.0, 
+                    "Kast1" : 0.1, 
+                    "Kast2" : 0.02, 
+                    "Kast3" : 0.02,
+                    
+                    "k" : (10.0**8.0)*0.25,
+ 
+                    "q2" : 3.1 * (10.0 ** (-4.0)),
+                    "q3" : 1.6 * (10.0**7.0),
+                    "q4" : 22.0,
+                    "q5" : (7.1),
+                    "q7" : 0.084,
+                    "q8" : (13.0),
+                    "q10" : 0.85,
+                    "q11" : 0.4,
+                    "q12" : 0.67,
+                    "q14" : 2.3,
+                    "q15" : 0.058}
+
+        '''fixed stoichiometric parameters'''
+        self.NADPH = 0.21
+        self.NADP = 0.29
+        self.CO2 = 0.2
+        self.Cp = 15.0
+        self.Ca = 0.5
+        self.pHmedium = 7.6
+        self.pHstroma = 7.9
+        self.H = (10.0**((-1.0)*self.pHstroma))*1000.0
+        self.Pext = 0.5
+        
+        
+
+        '''rate equations'''
+
+        
+        #v2,v3,v4,v5,v7,v8,v10,v11,v12,v14,v15 umgeformt von (zB v2)
+
+        #[BPGA]*[ADP] = q2 * [PGA] * [ATP]
+
+        #als
+
+        #v2 = (selbsterstelle grosse konstante) k * ([ATP]*[PGA] - (1/q2)*([ADP]*[BPGA]))
+        
+
+    def v1(self,RUBP,PGA,FBP,SBP,P):
+        return (self.par['V1']*RUBP)/(RUBP+self.par["Km1"]*(1+(PGA/self.par["Ki11"])+(FBP/self.par["Ki12"])+(SBP/self.par["Ki13"])+(P/self.par["Ki14"])+(self.NADPH/self.par["Ki15"])))
+    
+    def v2(self, ATP,PGA,ADP, BPGA):
+        return self.par["k"]*((ATP*PGA)-(1/self.par["q2"])*(ADP*BPGA))
+
+    def v3(self, BPGA, GAP, P):
+        return self.par["k"]*((self.NADPH*BPGA*self.H)-(1/self.par["q3"])*(GAP*self.NADP*P))
+
+    def v4(self,GAP, DHAP):
+        return self.par["k"]*((GAP)-(1/self.par["q4"])*(DHAP))
+
+    def v5(self,GAP, DHAP, FBP):
+        return self.par["k"]*((GAP*DHAP)-(1/self.par["q5"])*(FBP))
+
+    def v6(self,FBP, F6P, P):
+        return (self.par['V6']*FBP)/(FBP+self.par["Km6"]*(1+(F6P/self.par["Ki61"])+(P/self.par["Ki62"])))
+
+    def v7(self,GAP, F6P, X5P, E4P):
+        return self.par["k"]*((GAP*F6P)-(1/self.par["q7"])*(X5P*E4P))
+
+    def v8(self, DHAP, E4P, SBP):
+        return self.par["k"]*((DHAP*E4P)-(1/self.par["q8"])*(SBP))
+
+    def v9(self,SBP, P):
+        return (self.par['V9']*SBP)/(SBP+self.par["Km9"]*(1+(P/self.par["Ki9"])))
+
+    def v10(self,GAP, S7P, X5P, R5P):
+            return self.par["k"]*((GAP*S7P)-(1/self.par["q10"])*(X5P*R5P))
+
+    def v11(self,R5P, RU5P):
+        return self.par["k"]*((R5P)-(1/self.par["q11"])*(RU5P))
+
+    def v12(self, X5P, RU5P):
+        return self.par["k"]*((X5P)-(1/self.par["q12"])*(RU5P))
+
+    def v13(self, RU5P, ATP, PGA, RUBP, P, ADP):
+        return (self.par['V13']*RU5P*ATP)/((RU5P+self.par["Km131"]*(1+(PGA/self.par["Ki131"])+(RUBP/self.par["Ki132"])+(P/self.par["Ki133"])))*(ATP*(1+(ADP/self.par["Ki134"]))+self.par["Km132"]*(1+(ADP/self.par["Ki135"]))))
+
+    def v14(self, F6P, G6P):
+        return self.par["k"]*((F6P)-(1/self.par["q14"])*(G6P))
+
+    def v15(self, G6P, G1P):
+        return self.par["k"]*((G6P)-(1/self.par["q15"])*(G1P))
+    
+    def v16(self, ADP, P):
+        return (self.par['V16']*ADP*P)/((ADP+self.par["Km161"])*(P+self.par["Km162"]))
+
+    def N (self, P, PGA, GAP, DHAP):
+        return 1+(1+(self.par["Kpxt"]/self.Pext))*((P/self.par["Kpi"])+(PGA/self.par["Kpga"])+(GAP/self.par["Kgap"])+(DHAP/self.par["Kdhap"]))
+
+    def vpga(self, PGA, P, GAP, DHAP):
+        return (self.par['Vx']*PGA)/(self.N(P, PGA, GAP, DHAP)*self.par["Kpga"])
+
+    def vgap(self, GAP, P, PGA, DHAP):
+        return (self.par['Vx']*GAP)/(self.N(P, PGA, GAP, DHAP)*self.par["Kgap"])
+
+    def vdhap(self, DHAP, P, PGA, GAP):
+        return (self.par['Vx']*DHAP)/(self.N(P, PGA, GAP, DHAP)*self.par["Kdhap"])
+
+    def vex(self, PGA, GAP, DHAP, P, N):
+        return self.vpga(PGA, P, GAP, DHAP, N) + self.vgap(GAP, P, PGA, DHAP, N) + self.vdhap(DHAP, P, PGA, GAP, N)
+
+    def vst(self, G1P, ATP, ADP, P, PGA, F6P, FBP):
+        return (self.par['Vst']*G1P*ATP)/((G1P+self.par["Kmst1"])*((1+(ADP/self.par["Kist"]))*(ATP+self.par["Kmst2"])+((self.par["Kmst2"]*P)/(self.par["Kast1"]*PGA+self.par["Kast2"]*F6P+self.par["Kast3"]*FBP))))
+
+        ''''modelling the main-function'''
+        
+    def modell (self, T, (PGA, BPGA, GAP, DHAP, FBP, F6P, G6P, G1P, SBP, S7P, E4P, X5P, R5P, RUBP, RU5P, ATP)):
+        ADP = self.Ca - ATP
+        
+        P = self.Cp - (PGA + 2*BPGA + GAP + DHAP + 2*FBP + F6P + G6P + G1P + 2*SBP + S7P + E4P + X5P + R5P + 2*RUBP + RU5P + ATP)
+     
+        dPGA = 2*self.v1(RUBP,PGA,FBP,SBP,P) - self.v2(ATP,PGA,ADP, BPGA) - self.vpga(PGA, P, GAP, DHAP)
+    
+        dBPGA = self.v2(ATP,PGA,ADP, BPGA) - self.v3(BPGA, GAP, P)
+
+        dGAP = self.v3(BPGA, GAP, P) - self.v4(GAP, DHAP) - self.v5(GAP, DHAP, FBP) - self.v7(GAP, F6P, X5P, E4P) - self.v10(GAP, S7P, X5P, R5P) - self.vgap(GAP, P, PGA, DHAP)
+
+        dDHAP = self.v4(GAP, DHAP) - self.v5(GAP, DHAP, FBP) - self.v8(DHAP, E4P, SBP) - self.vdhap(DHAP, P, PGA, GAP)
+
+        dFBP = self.v5(GAP, DHAP, FBP) - self.v6(FBP, F6P, P)
+
+        dF6P = self.v6(FBP, F6P, P) - self.v7(GAP, F6P, X5P, E4P) - self.v14(F6P, G6P)
+
+        dG6P = self.v14(F6P, G6P) - self.v15(G6P, G1P)
+
+        dG1P = self.v15(G6P, G1P) - self.vst(G1P, ATP, ADP, P, PGA, F6P, FBP)
+
+        dSBP = self.v8(DHAP, E4P, SBP) - self.v9(SBP, P)
+
+        dS7P = self.v9(SBP, P) - self.v10(GAP, S7P, X5P, R5P)
+
+        dE4P = self.v7(GAP, F6P, X5P, E4P) - self.v8(DHAP, E4P, SBP)
+
+        dX5P = self.v7(GAP, F6P, X5P, E4P) + self.v10(GAP, S7P, X5P, R5P) - self.v12(X5P, RU5P)
+
+        dR5P = self.v10(GAP, S7P, X5P, R5P) - self.v11(R5P, RU5P)
+
+        dRUBP = self.v13(RU5P, ATP, PGA, RUBP, P, ADP) - self.v1(RUBP,PGA,FBP,SBP,P)
+
+        dRU5P = self.v11(R5P, RU5P) + self.v12(X5P, RU5P) - self.v13(RU5P, ATP, PGA, RUBP, P, ADP)
+
+        dATP = self.v16(ADP, P) - self.v2(ATP,PGA,ADP, BPGA) - self.v13(RU5P, ATP, PGA, RUBP, P, ADP) - self.vst(G1P, ATP, ADP, P, PGA, F6P, FBP)
+    
+        return [dPGA, dBPGA, dGAP, dDHAP, dFBP, dF6P, dG6P, dG1P, dSBP, dS7P, dE4P, dX5P, dR5P, dRUBP, dRU5P, dATP]
+
+
+
+    def steadystate(self,initvalue,AbsTol=1e-9):
+        array=list()
+        array.append(initvalue)
+        e = scipy.integrate.ode(self.modell).set_integrator('lsoda').set_initial_value(initvalue, 0)
+        time=range(120000)
+        err = np.linalg.norm(initvalue,ord=2)
+
+        ctn = 1
+        while e.successful and ctn < len(time) and err > AbsTol:
+            L = e.integrate(time[ctn])
+            err = np.linalg.norm(L-array[-1],ord=2)
+            array.append(L)
+            
+            #print('T=',time[ctn],' err=',err)
+            #print
+            ctn+=1
+        return array[-1]
+
+    def timeintegration(self,initvalue, time):
+        array=list()
+        array.append(initvalue)
+        z = scipy.integrate.ode(self.modell).set_integrator('lsoda').set_initial_value(initvalue, 0)
+
+        cnt = 1
+        while z.successful and cnt < len(time):
+            array.append(z.integrate(time[cnt]))
+    
+            cnt+=1
+            
+            
+        Array1=list() #beinhaltet G6P, PGA, F6P, S7P
+        Array2=list() #beinhaltet RU5P, X5P, SBP, G1P
+        Array3=list() #beinhaltet ATP, DHAP, RUBP, R5P
+        Array4=list() #beinhaltet BPGA, E4P, FBP, GAP
+        for k in range(len(time)):
+    #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8
+    #S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15, NADPH=16
+
+            Array1.append([array[k][6],array[k][0],array[k][5],array[k][9]])
+            Array2.append([array[k][14],array[k][11],array[k][8],array[k][7]])
+            Array3.append([array[k][15],array[k][3],array[k][13],array[k][12]])
+            Array4.append([array[k][1],array[k][10],array[k][4],array[k][2]])
+
+        array1 = np.array(Array1)
+        array2 = np.array(Array2)
+        array3 = np.array(Array3)
+        array4 = np.array(Array4)
+
+
+
+
+
+        label1 = ['G6P', 'PGA', 'F6P', 'S7P']
+        label2 = ['RU5P', 'X5P', 'SBP', 'G1P']
+        label3 = ['ATP', 'DHAP', 'RUBP', 'R5P','NADPH']
+        label4 = ['BPGA', 'E4P', 'FBP', 'GAP']
+
+    #N = plt.figure(1)
+
+        plt.subplot(2, 2, 1)
+        for a in range(4):
+            plt.plot(time, array1[:,a], label=str(label1[a]))
+        plt.xlabel('Time in Seconds')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+        plt.subplot(2, 2, 2)
+        for s in range(4):
+            plt.plot(time, array2[:,s], label=str(label2[s]))
+        plt.xlabel('Time in Seconds')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+
+        plt.subplot(2, 2, 3)
+        for d in range(4):
+            plt.plot(time, array3[:,d], label=str(label3[d]))
+        plt.xlabel('Time in Seconds')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+
+        plt.subplot(2, 2, 4)
+        for c in range(4):
+            plt.plot(time, array4[:,c], label=str(label4[c]))
+        plt.xlabel('Time in Seconds')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+        plt.show()
+#initvalue(y0),ZEITEINHEIT (T), ARRAY (Y)
+
+
+        
+    def iterationNADPH(self,initvalue):
+        
+        concArray=list()
+        extArray=list()
+        
+        x=CalvinHardcodedNADPH()
+        x.Cn=0.5
+        x.NADPH=0.03
+        x.NADP=x.Cn - x.NADPH
+        while x.NADPH <= 0.5:
+            
+            std=x.steadystate(initvalue)
+            concArray.append(std)
+            extArray.append(x.NADPH)
+
+
+            x.NADPH += 0.03
+        
+        Array1=list() #beinhaltet G6P, PGA, F6P, S7P
+        Array2=list() #beinhaltet RU5P, X5P, SBP, G1P
+        Array3=list() #beinhaltet ATP, DHAP, RUBP, R5P
+        Array4=list() #beinhaltet BPGA, E4P, FBP, GAP
+
+#Y.append(y0)
+
+        for k in range(len(extArray)):
+    #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8
+    #S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15, NADPH=16
+
+            Array1.append([concArray[k][6],concArray[k][0],concArray[k][5],concArray[k][9]])
+            Array2.append([concArray[k][14],concArray[k][11],concArray[k][8],concArray[k][7]])
+            Array3.append([concArray[k][15],concArray[k][3],concArray[k][13],concArray[k][12]])
+            Array4.append([concArray[k][1],concArray[k][10],concArray[k][4],concArray[k][2]])
+
+        array1 = np.array(Array1)
+        array2 = np.array(Array2)
+        array3 = np.array(Array3)
+        array4 = np.array(Array4)
+
+
+
+
+
+
+        label1 = ['G6P', 'PGA', 'F6P', 'S7P']
+        label2 = ['RU5P', 'X5P', 'SBP', 'G1P']
+        label3 = ['ATP', 'DHAP', 'RUBP', 'R5P','NADPH']
+        label4 = ['BPGA', 'E4P', 'FBP', 'GAP']
+
+        #N = plt.figure(1)
+
+        plt.subplot(2, 2, 1)
+        for a in range(4):
+            plt.plot(extArray, array1[:,a], label=str(label1[a]))
+        plt.xlabel('NADPH Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+            
+        plt.subplot(2, 2, 2)
+        for s in range(4):
+            plt.plot(extArray, array2[:,s], label=str(label2[s]))
+        plt.xlabel('NADPH Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+                
+                
+        plt.subplot(2, 2, 3)
+        for d in range(4):
+            plt.plot(extArray, array3[:,d], label=str(label3[d]))
+        plt.xlabel('NADPH Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+                    
+                    
+        plt.subplot(2, 2, 4)
+        for c in range(4):
+            plt.plot(extArray, array4[:,c], label=str(label4[c]))
+        plt.xlabel('NADPH Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+        plt.show()
+    def iterationPext(self,initvalue):
+        
+        concArray=list()
+        extArray=list()
+        
+        x=CalvinHardcodedNADPH()
+        x.Cn=0.5
+        x.Pext=0.03
+        while x.Pext <= 2.0:
+            
+            std=x.steadystate(initvalue)
+            concArray.append(std)
+            extArray.append(x.Pext)
+
+
+            x.Pext += 0.03
+        
+        Array1=list() #beinhaltet G6P, PGA, F6P, S7P
+        Array2=list() #beinhaltet RU5P, X5P, SBP, G1P
+        Array3=list() #beinhaltet ATP, DHAP, RUBP, R5P
+        Array4=list() #beinhaltet BPGA, E4P, FBP, GAP
+
+#Y.append(y0)
+
+        for k in range(len(extArray)):
+    #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8
+    #S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15, NADPH=16
+
+            Array1.append([concArray[k][6],concArray[k][0],concArray[k][5],concArray[k][9]])
+            Array2.append([concArray[k][14],concArray[k][11],concArray[k][8],concArray[k][7]])
+            Array3.append([concArray[k][15],concArray[k][3],concArray[k][13],concArray[k][12]])
+            Array4.append([concArray[k][1],concArray[k][10],concArray[k][4],concArray[k][2]])
+
+        array1 = np.array(Array1)
+        array2 = np.array(Array2)
+        array3 = np.array(Array3)
+        array4 = np.array(Array4)
+
+
+
+
+
+
+        label1 = ['G6P', 'PGA', 'F6P', 'S7P']
+        label2 = ['RU5P', 'X5P', 'SBP', 'G1P']
+        label3 = ['ATP', 'DHAP', 'RUBP', 'R5P','NADPH']
+        label4 = ['BPGA', 'E4P', 'FBP', 'GAP']
+
+        #N = plt.figure(1)
+
+        plt.subplot(2, 2, 1)
+        for a in range(4):
+            plt.plot(extArray, array1[:,a], label=str(label1[a]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+            
+        plt.subplot(2, 2, 2)
+        for s in range(4):
+            plt.plot(extArray, array2[:,s], label=str(label2[s]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+                
+                
+        plt.subplot(2, 2, 3)
+        for d in range(4):
+            plt.plot(extArray, array3[:,d], label=str(label3[d]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+                    
+                    
+        plt.subplot(2, 2, 4)
+        for c in range(4):
+            plt.plot(extArray, array4[:,c], label=str(label4[c]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+
+        plt.show()
+#initvalue (Y0)ZEITRAHMEN (t), ARRAY (List5)
+    def v1VsPext(self,initvalue):
+        x=CalvinHardcodedNADPH()
+        x.Pext = 0.03
+        
+        
+        concArray=list()
+        concArray2=list()
+        concArray3=list()
+        tptarray=list()
+        pextArray=list()
+        while x.Pext <= 2.0:
+            z=x.steadystate(initvalue)
+            P=15-(z[0]+2*z[1]+z[2]+z[3]+2*z[4]+z[5]+z[6]+z[7]+2*z[8]+z[9]+z[10]+z[11]+z[12]+2*z[13]+z[14]+z[15])
+
+            V1= x.v1(z[13],z[0],z[4],z[8],P)
+            #PGA=0, BPGA=1, GAP=2, DHAP=3, FBP=4, F6P=5, G6P=6, G1P=7, SBP=8
+            #S7P=9, E4P=10, X5P=11, R5P=12, RUBP=13, RU5P=14, ATP=15, NADPH=16
+            #    def vdhap(self, DHAP, P, PGA, GAP):
+            ADP=0.5-z[15]
+            Vex = x.vpga(z[0],P,z[2],z[3])+x.vgap(z[2],P,z[0],z[3])+x.vdhap(z[3],P,z[0],z[2])
+            Vatp = z[15]
+            concArray.append(V1)
+            concArray2.append(P)
+            concArray3.append(Vatp)
+            tptarray.append([x.vpga(z[0],P,z[2],z[3]),x.vgap(z[2],P,z[0],z[3]),x.vdhap(z[3],P,z[0],z[2])])
+            
+                
+            
+            pextArray.append(x.Pext)
+            x.Pext += 0.03
+        tptarray=np.array(tptarray)
+        plt.subplot(2,2,1)
+        plt.plot(pextArray, concArray, label='Rubisco Activity')
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Activity')
+        plt.legend(loc='best')
+                
+        plt.subplot(2,2,2)
+        plt.plot(pextArray, concArray2, label='Internal orthophosphate concentration')
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+        
+        plt.subplot(2,2,3)
+        plt.plot(pextArray, concArray3, label='ATP concentration')
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration')
+        plt.legend(loc='best')
+        
+        label1 = ['pga', 'gap', 'dhap']
+        
+        plt.subplot(2, 2, 4)
+        for a in range(3):
+            plt.plot(pextArray, tptarray[:,a], label=str(label1[a]))
+        plt.xlabel('Pext Concentration in mM')
+        plt.ylabel('Concentration in mM')
+        plt.legend(loc='best')
+        
+        
+        
+    def expofluxratessteadystate1(self, initvalue):
+        x=CalvinHardcodedNADPH()
+        z=x.steadystate(initvalue)
+        
+        P=15-(z[0]+2*z[1]+z[2]+z[3]+2*z[4]+z[5]+z[6]+z[7]+2*z[8]+z[9]+z[10]+z[11]+z[12]+2*z[13]+z[14]+z[15])
+        ADP= 0.5-z[15]
+        
+
+       
+        Vpga=x.vpga(z[0], P, z[2], z[3])
+       
+        Vgap=x.vgap(z[2], P, z[0], z[3])
+       
+        Vdhap=x.vdhap(z[3], P, z[0], z[2])
+       
+        
+       
+        
+        array=[Vpga,Vgap,Vdhap]
+        return array
+        
+    def expofluxratessteadystate(self,initvalue):
+
+        array=list()
+        array.append(self.expofluxratessteadystate1(initvalue))
+        array2=tuple(self.expofluxratessteadystate1(initvalue))
+        
+
+
+        fig, ax = plt.subplots()
+        n_rates=3
+        index = np.arange(n_rates)
+        bar_width = 0.35
+
+        opacity = 0.4
+
+        rects1 = plt.bar(index, array2, bar_width,
+                 alpha=opacity,
+                 color='g')
+
+
+
+        plt.xlabel('Rate')
+        plt.ylabel('Activity')
+        plt.title('Steadystate Fluxes')
+        plt.xticks(index + bar_width, ('Vpga', 'Vgap', 'Vdhap'))
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+        return array
+
+
+    def nadphpext(self,initvalue,choice):
+        if choice == "v1":
+            xv=CalvinHardcodedNADPH()
+            xv.Pext=0.01
+            xv.NADPH=0.01
+            xv.NADP=(0.5-xv.NADPH)
+            
+            
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.01,2.5,10)
+            var2=np.linspace(0.01,0.5,10)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.Pext=var
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.NADPH=Var
+                    xv.NADP=0.5-Var
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+    
+                    
+                    
+                    V1= xv.v1(a[13],a[0],a[4],a[8],P)
+    
+                    
+    
+                    
+    #                    if balance2<0.7 and balance2>0.6:
+    #                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+    #                            scatterlist.append([var,Var,vatp])
+    #                            scatterlist.append([var,Var,vnadph])
+    #                            
+    #                            
+                    vx1.append(V1)
+                    #vx2.append(vnadph)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+            
+            
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            surf=ha.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap=plt.cm.jet,
+                       linewidth=1, antialiased=True)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            #ha.plot_surface(X, Y, Q,alpha=0.4, color='r',label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            
+            hf.colorbar(surf)
+            ha.set_xlabel('NADPH concentration')
+            ha.set_ylabel('pext concentration')
+            ha.set_zlabel('Rubisco Flux')
+            
+            plt.title('Dependency on NADPH and PEXT')
+            plt.show()
+            
+            #print GoodStuff
+            #print literatur
+            
+            goodstuff=np.array(goodstuff)
+            #goodstuff=np.vstack(goodstuff)
+            #print goodstuff
+        if choice == "tpt":
+            xv=CalvinHardcodedNADPH()
+            xv.Pext=0.01
+            xv.NADPH=0.01
+            xv.NADP=(0.5-xv.NADPH)
+            
+            
+            Vmaxatplist=list()
+            Vmaxnadphlist=list()
+            scatterlist=list()
+            
+            ATPlist=list()            
+            NADPHlist=list()
+            
+            var1=np.linspace(0.1,2.5,10)
+            var2=np.linspace(0.1,0.5,10)
+            
+            goodstuff=list()
+            
+            for var in var1:
+                vx1=list()
+                vx2=list()
+                xv.Pext=var
+                list1=list()
+                
+                
+                for Var in var2:
+                    
+                    xv.NADPH=Var
+                    xv.NADP=0.5-Var
+                    
+                    
+                    a=xv.steadystate(initvalue)
+                    P=15-(a[0]+2*a[1]+a[2]+a[3]+2*a[4]+a[5]+a[6]+a[7]+2*a[8]+a[9]+a[10]+a[11]+a[12]+2*a[13]+a[14]+a[15])
+                    
+                    
+                    
+                    ATP=a[15]
+                    ADP=(0.5-ATP)
+    
+                    
+                    
+                    V1= xv.v1(a[13],a[0],a[4],a[8],P)
+                    vpga=xv.vpga(a[0], P, a[2], a[3])
+              
+                    vdhap=xv.vdhap(a[3], P, a[0], a[2])
+    
+                    
+    
+                    
+    #                    if balance2<0.7 and balance2>0.6:
+    #                            goodstuff.append(('NICE VALUE: ' + 'Vmax= ' + str(var) + ' Km= ' + str(Var) + "vnadph/vatp-verhaeltnis= " +str(balance2)+" atp stdstt concentration: "+str(ATP)+" nadph stdstt concentration "+str(NADPH)))
+    #                            scatterlist.append([var,Var,vatp])
+    #                            scatterlist.append([var,Var,vnadph])
+    #                            
+    #                            
+                    vx1.append(vpga)
+                    vx2.append(vdhap)
+                    list1.append(Var)
+                            
+                            
+                            
+                            
+                ATPlist.append(vx1)
+                NADPHlist.append(vx2)
+                Vmaxnadphlist.append(var)
+                            
+                            
+                            
+            Vmaxatplist.append(list1)
+            
+            
+            Vmaxnadphlist=np.array(Vmaxnadphlist)
+            Vmaxatplist=np.array(Vmaxatplist)
+            #GoodStuff=np.array(goodstuff)
+            #GoodStuff=np.vstack(GoodStuff)
+            #literatur=np.array(literatur)
+            
+            
+            
+            hf = plt.figure()
+            ha = hf.add_subplot(111, projection='3d')
+            
+            X, Y = np.meshgrid(Vmaxatplist, Vmaxnadphlist)  # `plot_surface` expects `x` and `y` data to be 2D
+            Z=ATPlist#pga
+            Q=NADPHlist#dhap
+            
+            
+            Gx, Gy = np.gradient(Z) # gradients with respect to x and y
+            G = (Gx**2+Gy**2)**.5  # gradient magnitude
+            N = G/G.max()  # normalize 0..1###plt.cm.jet(N)
+            
+            
+            
+            ha.plot_surface(X, Y, Z, rstride=1, cstride=1, color='g',alpha=0.4)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+            #ha.scatter(0.21,0.35,0.1)
+            #ha.plot_surface(X, Y, Q,alpha=0.4, color='r',label='NADPH')
+            #ha.scatter(0.222,0.0444,0.41,color='b')
+            #ha.scatter(0.222,0.0444,0.26,color='b')
+            ha.plot_surface(X, Y, Q, rstride=1, cstride=1, color='r',alpha=0.4)#alpha=0.4, color='g',label='ATP')#,rstride=1, cstride=1, facecolors=,linewidth=0, antialiased=False, shade=False)
+                     
+            #hf.colorbar(surf)
+            ha.set_xlabel('NADPH concentration')
+            ha.set_ylabel('pext concentration')
+            ha.set_zlabel('vpga vs dhap')
+            
+            plt.title('green: pga, red:dhap')
+            plt.show()
