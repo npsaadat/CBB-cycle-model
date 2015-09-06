@@ -214,7 +214,7 @@ class Calvin(object):
         x=Calvin()
         x.par=self.par.copy()
         
-        x.par['Vnadph']=0.13*0.25
+        x.par['Vnadph']=0.13*8
         x.par['Kmnadph']=0.036
         x.timeintegration(initvalue,time)
         
@@ -262,13 +262,13 @@ class Calvin(object):
             for var in var1:
                 vx1=list()
                 vx2=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
                 for Var in var2:
                     
-                    xv.par['V16']=(Var*0.25)
+                    xv.par['V16']=(Var*8)
                     
                     
                     a=xv.steadystate(initvalue)
@@ -381,13 +381,13 @@ class Calvin(object):
             for var in var1:
                 vx1=list()
                 vx2=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
                 for Var in var2:
                     
-                    xv.par['V16']=(Var*0.25)
+                    xv.par['V16']=(Var*8)
                     
                     
                     a=xv.steadystate(initvalue)
@@ -518,13 +518,13 @@ class Calvin(object):
             for var in var1:
                 vx1=list()
                 vx2=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
                 for Var in var2:
                     
-                    xv.par['V16']=(Var*0.25)
+                    xv.par['V16']=(Var*8)
                     
                     
                     a=xv.steadystate(initvalue)
@@ -644,13 +644,13 @@ class Calvin(object):
             for var in var1:
                 vx1=list()
                 vx2=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
                 for Var in var2:
                     
-                    xv.par['V16']=(Var*0.25)
+                    xv.par['V16']=(Var*8)
                     
                     
                     a=xv.steadystate(initvalue)
@@ -756,13 +756,13 @@ class Calvin(object):
             for var in var1:
                 vx1=list()
                 vx2=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
                 for Var in var2:
                     
-                    xv.par['V16']=(Var*0.25)
+                    xv.par['V16']=(Var*8)
                     
                     
                     a=xv.steadystate(initvalue)
@@ -878,13 +878,13 @@ class Calvin(object):
             for var in var1:
                 vx1=list()
                 vx2=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
                 for Var in var2:
                     
-                    xv.par['V16']=(Var*0.25)
+                    xv.par['V16']=(Var*8)
                     
                     
                     a=xv.steadystate(initvalue)
@@ -998,13 +998,13 @@ class Calvin(object):
             for var in var1:
                 vx1=list()
                 vx2=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
                 for Var in var2:
                     
-                    xv.par['V16']=(Var*0.25)
+                    xv.par['V16']=(Var*8)
                     
                     
                     a=xv.steadystate(initvalue)
@@ -1125,7 +1125,7 @@ class Calvin(object):
             for var in var1:
                 vx1=list()
                 vx2=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
@@ -1256,7 +1256,7 @@ class Calvin(object):
                 vx2=list()
                 vx3=list()
                 vx4=list()
-                xv.par['Vnadph']=(var*0.25)
+                xv.par['Vnadph']=(var*8)
                 list1=list()
                 
                 
@@ -1768,7 +1768,7 @@ class Calvin(object):
         starchfluxes=list()
         x=Calvin()
         x.par=self.par.copy()
-        while x.par['V1']>(0.05*0.25) and x.par['V6']>(0.05*0.25) and x.par['V9']>(0.02*0.25) and x.par['V13']>(0.05*0.25) and x.par['Vx']>(0.05*0.25):
+        while x.par['V1']>(0.05*8) and x.par['V6']>(0.05*8) and x.par['V9']>(0.02*8) and x.par['V13']>(0.05*8) and x.par['Vx']>(0.05*8):
             
         
         
@@ -1794,7 +1794,7 @@ class Calvin(object):
             print 
             
             #print x.par[y[0]]
-            x.par[y0]=x.par[y0]+(0.05*0.25)
+            x.par[y0]=x.par[y0]+(0.05*8)
             
             print y0
             print x.par[y0]
@@ -1806,7 +1806,7 @@ class Calvin(object):
             
             
             x.par[y1]
-            x.par[y1]=x.par[y1]-(0.05*0.25)
+            x.par[y1]=x.par[y1]-(0.05*8)
 
 
 
@@ -1826,7 +1826,7 @@ class Calvin(object):
         starchfluxes=list()
         x=Calvin()
         x.par=self.par.copy()
-        while x.par['V1']>(0.1*0.25) and x.par['V6']>(0.05*0.25) and x.par['V9']>(0.02*0.25) and x.par['V13']>(0.1*0.25) and x.par['V16']>(0.1*0.25) and x.par['Vx']>(0.1*0.25) or x.par['Vnadph']>(0.1*0.25):
+        while x.par['V1']>(0.1*8) and x.par['V6']>(0.05*8) and x.par['V9']>(0.02*8) and x.par['V13']>(0.1*8) and x.par['V16']>(0.1*8) and x.par['Vx']>(0.1*8) or x.par['Vnadph']>(0.1*8):
             
         
         
@@ -1855,7 +1855,7 @@ class Calvin(object):
             print 
             
             #print x.par[y[0]]
-            x.par[y0]=x.par[y0]+(0.1*0.25)
+            x.par[y0]=x.par[y0]+(0.1*8)
             
             print y0
             print x.par[y0]
@@ -1867,7 +1867,7 @@ class Calvin(object):
             
             
             x.par[y1]
-            x.par[y1]=x.par[y1]-(0.1*0.25)
+            x.par[y1]=x.par[y1]-(0.1*8)
 
 
 
@@ -2412,25 +2412,25 @@ class Calvin(object):
 class CalvinHardcodedNADPH(object):
     def __init__(self):
         '''kinetic parameters & equilibrium constants'''
-        self.par = {'V1' : 0.34*0.25,#(340.)*0.25,
+        self.par = {'V1' : 0.34*8,#(340.)*0.25,
                     #'V1' : 340*0.25,
 
-                    'V6' : 0.2*0.25,#(200.)*0.25,
+                    'V6' : 0.2*8,#(200.)*0.25,
                     #'V6' : 200*0.25,
                     
-                    'V9' : 0.04*0.25,#(40.)*0.25,
+                    'V9' : 0.04*8,#(40.)*0.25,
                     #'V9' : 40*0.25,
                     
-                    'V13' : 1.0*0.25,#(1000.)*0.25,
+                    'V13' : 1.0*8,#(1000.)*0.25,
                     #'V13' : 1000*0.25,
                     
-                    'V16' : 0.35*0.25,#(350.)*0.25,
+                    'V16' : 0.35*8,#(350.)*0.25,
                     #'V16' : 350*0.25,
                     
-                    'Vst' : 0.04*0.25,#(40.)*0.25,
+                    'Vst' : 0.04*8,#(40.)*0.25,
                     #'Vst' : 40*0.25,
                     
-                    'Vx' : 0.25*0.25,#(250.)*0.25,
+                    'Vx' : 0.25*8,#(250.)*0.25,
                     #'Vx' : 250*0.25,
                     
                     "Km1" : 0.02,
@@ -2465,7 +2465,7 @@ class CalvinHardcodedNADPH(object):
                     "Kast2" : 0.02, 
                     "Kast3" : 0.02,
                     
-                    "k" : (10.0**8.0)*0.25,
+                    "k" : (10.0**8.0)*8,
  
                     "q2" : 3.1 * (10.0 ** (-4.0)),
                     "q3" : 1.6 * (10.0**7.0),
