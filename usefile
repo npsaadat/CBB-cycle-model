@@ -1,0 +1,67 @@
+import scipy.integrate
+import matplotlib.pyplot as plt
+import numpy as np
+from klassenX import CalvinHardcodedNADPH
+from klassenX import Calvin
+import warnings
+warnings.filterwarnings('ignore')
+
+
+'''concentrationvariables for Ca & Cn (max. 0.5)'''
+
+ATP = 0.37
+NADPH=0.21
+'''concentrationvariables for Cp (max. 15) INCLUDING ATP'''
+
+
+PGA = 1.0
+BPGA = 0.5 #da in Cp max 15 2*BPGA
+GAP = 1.0
+DHAP = 0.5
+FBP = 0.25 #da in Cp max 15 2*FBP
+F6P = 0.5
+G6P = 0.57
+G1P = 1.14
+SBP = 0.5 ##da in Cp max 15 2*SBP
+S7P = 0.5
+E4P = 1.07
+X5P = 1.07
+R5P = 2.07
+RU5P = 1.14
+RUBP = 0.5 #da in Cp max 15 2*RUBP
+y0 = [PGA, BPGA, GAP, DHAP, FBP, F6P, G6P, G1P, SBP, S7P, E4P, X5P, R5P, RUBP, RU5P, ATP,NADPH]
+
+
+T=np.linspace(0,200,1000)
+
+
+
+x = CalvinHardcodedNADPH()
+y=Calvin()
+y.timeintegration(y0, T)
+#x.v1VsPext(y0)
+#y.v1VsPext(y0)
+#y.timeintegration(y0, T)
+#y.controlcoefficients(y0)
+#x.expofluxratessteadystate(y0)
+#y.vatpsurface(y0, "pga")
+#x.v1VsPext(y0)
+#y.nadphpext(y0,"v1")
+#y.controlcoefficientsexporter(y0)
+#x.expofluxratessteadystate(y0)
+#x.v1VsPext(y0)
+#y.iterationPext(y0)
+#y.controlcoefficients(y0)
+#y.iterationPext(y0)
+#y.v1VsPext(y0)
+#y.v1VsPext(y0)
+#y.tptmutant_procent(y0, 0.3)
+#y.fluxratessteadystate(y0)
+#y.timeintegration(y0, T)
+#xyz=y.starchimprovement(y0)
+#y.vnadphsurface(y0, '1')
+#y.vatpsurface(y0, '2')
+#y.vatpsurface(y0, '3')
+#y.starchmutant_timeintegration(y0,T)
+#xyz=y.starchimprovement(y0)
+#y.iterationPext(y0)
